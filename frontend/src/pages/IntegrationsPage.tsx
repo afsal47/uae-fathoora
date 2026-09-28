@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, X, RefreshCw, Copy, Check } from 'lucide-react';
 import { tenantApi, integrationApi, type Tenant, type Integration } from '../lib/api';
 
+
 export default function IntegrationsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenant, setSelectedTenant] = useState('');
