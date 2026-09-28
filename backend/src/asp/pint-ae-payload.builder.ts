@@ -156,6 +156,15 @@ export type PintAeInvoice = {
   };
 };
 
+/** IBMS sends a raw number such as 0030; Peppol cbc:ID uses inv-0030. */
+export function toPeppolInvoiceNumber(invoiceNumber: string): string {
+  const trimmed = invoiceNumber.trim();
+  if (/^inv-/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `inv-${trimmed}`;
+}
+
 export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice {
   const { invoice } = context;
   const dto = context.createInvoiceDto;
@@ -233,7 +242,7 @@ export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice
 
   return {
     documentType: invoice.documentType,
-    invoiceNumber: invoice.invoiceNumber,
+    invoiceNumber: toPeppolInvoiceNumber(invoice.invoiceNumber),
     issueDate: invoice.issueDate.toISOString().split('T')[0],
     taxPointDate: dto?.taxPointDate,
     dueDate: dto?.dueDate,

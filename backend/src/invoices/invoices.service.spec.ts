@@ -1,4 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 
 describe('InvoicesService', () => {
@@ -116,15 +115,16 @@ describe('InvoicesService', () => {
     expect(queueService.enqueueInvoiceSubmission).not.toHaveBeenCalled();
   });
 
-  it('rejects non-AED invoices without FX fields', async () => {
-    const { service } = createService();
+  it('accepts non-AED invoices without FX fields', async () => {
+    const { service, queueService } = createService();
 
-    await expect(
-      service.create({
-        ...createInvoiceDto,
-        currencyCode: 'USD',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const invoice = await service.create({
+      ...createInvoiceDto,
+      currencyCode: 'USD',
+    });
+
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(invoice.status).toBe('QUEUED');
   });
 
   it('accepts non-AED invoices when FX fields are provided', async () => {
@@ -142,20 +142,19 @@ describe('InvoicesService', () => {
     expect(invoice.status).toBe('QUEUED');
   });
 
-  it('rejects tax invoice missing seller address details', async () => {
-    const { service } = createService();
+  it('accepts a tax invoice when address and legal registration are omitted', async () => {
+    const { service, queueService } = createService();
 
-    await expect(
-      service.create({
-        ...createInvoiceDto,
-        seller: {
-          name: 'Seller',
-          trn: '100123456700003',
-          address: { countryCode: 'AE' },
-          legalRegistration: partyExtras.legalRegistration,
-        },
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const invoice = await service.create({
+      ...createInvoiceDto,
+      dueDate: undefined,
+      paymentMeans: undefined,
+      seller: { name: 'Seller' },
+      buyer: { name: 'Buyer' },
+    });
+
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(invoice.status).toBe('QUEUED');
   });
 
   it('resolves TAX_INVOICE with all Outside Scope lines to COMMERCIAL_INVOICE', async () => {

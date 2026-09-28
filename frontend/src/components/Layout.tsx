@@ -43,7 +43,7 @@ export default function Layout() {
         </nav>
         <div className="p-4 border-t border-gray-200 space-y-2">
           <a
-            href="http://localhost:3000/docs"
+            href="http://localhost:3020/docs"
             target="_blank"
             rel="noreferrer"
             className="block text-xs text-gray-400 hover:text-blue-600 transition-colors"

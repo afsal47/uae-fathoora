@@ -78,8 +78,6 @@ class PartyAddressDto {
   @ApiPropertyOptional({ default: 'AE' })
   @IsOptional()
   @IsString()
-  @MaxLength(2)
-  @Matches(/^[A-Z]{2}$/)
   countryCode?: string;
 }
 

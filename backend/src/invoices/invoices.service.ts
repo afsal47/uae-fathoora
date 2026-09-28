@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Integration, Invoice, InvoiceLine, Prisma, Tenant } from '@prisma/client';
 import { buildPintAePayload } from '../asp/pint-ae-payload.builder';
 import { buildPintAeXml } from '../asp/pint-ae-xml.builder';
@@ -6,10 +6,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import {
-  CREDIT_NOTE_DOCUMENT_TYPES,
-  PRECEDING_REF_REQUIRED_TYPES,
-  buildProfileExecutionId,
-  isSelfBilledDocument,
   isZeroChargedVatCategory,
   resolveDocumentTypeFromTaxMix,
 } from './document-type.constants';
@@ -98,8 +94,6 @@ export class InvoicesService {
       resolvedDocumentType === createInvoiceDto.documentType
         ? createInvoiceDto
         : { ...createInvoiceDto, documentType: resolvedDocumentType };
-
-    this.validateInvoice(dtoForValidation, subtotalAmount, taxAmount, totalAmount);
 
     const typeChangeNote =
       resolvedDocumentType !== createInvoiceDto.documentType
@@ -395,221 +389,6 @@ export class InvoicesService {
     }
 
     return { tenant, integration };
-  }
-
-  private readonly VALID_VAT_CATEGORIES = ['S', 'Z', 'E', 'AE', 'O', 'K', 'G', 'L', 'M'];
-  private readonly EXEMPTION_REQUIRED_CATEGORIES = ['E', 'AE', 'O', 'K', 'G'];
-  private readonly ZERO_RATE_CATEGORIES = ['E', 'O', 'K', 'G'];
-  private readonly PAYMENT_MEANS_REQUIRED_TYPES = [
-    'TAX_INVOICE',
-    'SELF_BILLED_TAX_INVOICE',
-    'COMMERCIAL_INVOICE',
-    'DEBIT_NOTE',
-  ] as const;
-  private readonly BUYER_TRN_OPTIONAL_TYPES = [
-    'COMMERCIAL_INVOICE',
-    'COMMERCIAL_CREDIT_NOTE',
-  ] as const;
-
-  private validateInvoice(
-    createInvoiceDto: CreateInvoiceDto,
-    subtotalAmount: number,
-    taxAmount: number,
-    totalAmount: number,
-  ) {
-    if (!createInvoiceDto.seller.name || !createInvoiceDto.buyer.name) {
-      throw new BadRequestException('Seller and buyer names are required.');
-    }
-
-    this.assertPartyAddress(createInvoiceDto.seller, 'seller');
-    this.assertPartyAddress(createInvoiceDto.buyer, 'buyer');
-    this.assertLegalRegistration(createInvoiceDto.seller, 'seller');
-    this.assertLegalRegistration(createInvoiceDto.buyer, 'buyer');
-
-    if (!createInvoiceDto.seller.trn?.trim()) {
-      throw new BadRequestException(
-        'seller.trn is required (Evatra BT-29 Seller Identifier).',
-      );
-    }
-
-    const buyerTrnOptional = (
-      this.BUYER_TRN_OPTIONAL_TYPES as readonly string[]
-    ).includes(createInvoiceDto.documentType);
-    if (!buyerTrnOptional && !createInvoiceDto.buyer.trn?.trim()) {
-      throw new BadRequestException(
-        'buyer.trn is required for this document type (Evatra BT-46).',
-      );
-    }
-
-    if (
-      (this.PAYMENT_MEANS_REQUIRED_TYPES as readonly string[]).includes(
-        createInvoiceDto.documentType,
-      ) &&
-      !createInvoiceDto.paymentMeans?.code
-    ) {
-      throw new BadRequestException(
-        `${createInvoiceDto.documentType} requires paymentMeans.code (Evatra IBT-081).`,
-      );
-    }
-
-    if (totalAmount > 0 && !createInvoiceDto.dueDate) {
-      throw new BadRequestException(
-        'dueDate is required when payable amount is greater than zero (Evatra BT-9).',
-      );
-    }
-
-    if (isSelfBilledDocument(createInvoiceDto.documentType)) {
-      const profileExecutionId = buildProfileExecutionId(
-        createInvoiceDto.transactionFlags,
-        createInvoiceDto.profileExecutionId,
-      );
-      if (profileExecutionId !== '00000000') {
-        throw new BadRequestException(
-          'Self-billed documents require ProfileExecutionID 00000000 (Evatra BTAE-02).',
-        );
-      }
-    }
-
-    const currency = createInvoiceDto.currencyCode ?? 'AED';
-    const taxCurrency = createInvoiceDto.taxCurrencyCode ?? 'AED';
-
-    if (currency !== 'AED') {
-      if (taxCurrency !== 'AED') {
-        throw new BadRequestException(
-          'taxCurrencyCode must be AED when invoice currencyCode is not AED.',
-        );
-      }
-      if (createInvoiceDto.exchangeRate == null || createInvoiceDto.exchangeRate <= 0) {
-        throw new BadRequestException(
-          'exchangeRate (UAE Central Bank rate) is required when currencyCode is not AED.',
-        );
-      }
-      if (createInvoiceDto.taxInclusiveAmountInAed == null) {
-        throw new BadRequestException(
-          'taxInclusiveAmountInAed (aedtotal-incl-vat) is required when currencyCode is not AED.',
-        );
-      }
-    }
-
-    if ((createInvoiceDto.seller.address?.countryCode ?? 'AE') !== 'AE') {
-      throw new BadRequestException(
-        'Only AE country code is supported for seller in this MVP.',
-      );
-    }
-
-    if (subtotalAmount < 0 || taxAmount < 0 || totalAmount <= 0) {
-      throw new BadRequestException('Invoice totals must be greater than zero.');
-    }
-
-    for (const line of createInvoiceDto.lines) {
-      const cat = line.vatCategory.toUpperCase();
-      if (!this.VALID_VAT_CATEGORIES.includes(cat)) {
-        throw new BadRequestException(
-          `Invalid VAT category '${line.vatCategory}'. Allowed: ${this.VALID_VAT_CATEGORIES.join(', ')}`,
-        );
-      }
-
-      if (cat === 'S' && ![0, 5].includes(line.vatRate)) {
-        throw new BadRequestException(
-          `Standard (S) VAT rate must be 0 or 5, got ${line.vatRate}.`,
-        );
-      }
-
-      // AE reverse charge: statutory rate 5% (or 0) but tax is not charged on the invoice
-      if (cat === 'AE' && ![0, 5].includes(line.vatRate)) {
-        throw new BadRequestException(
-          `Reverse charge (AE) VAT rate must be 0 or 5, got ${line.vatRate}.`,
-        );
-      }
-
-      if (this.ZERO_RATE_CATEGORIES.includes(cat) && line.vatRate !== 0) {
-        throw new BadRequestException(
-          `VAT category '${cat}' must have vatRate 0, got ${line.vatRate}.`,
-        );
-      }
-
-      if (
-        this.EXEMPTION_REQUIRED_CATEGORIES.includes(cat) &&
-        !line.vatExemptionReason
-      ) {
-        throw new BadRequestException(
-          `VAT category '${cat}' requires vatExemptionReason.`,
-        );
-      }
-
-      if (cat === 'AE' && !line.rcmNatureCode?.trim()) {
-        throw new BadRequestException(
-          "VAT category 'AE' requires rcmNatureCode (Evatra BTAE-09).",
-        );
-      }
-    }
-
-    if (
-      (PRECEDING_REF_REQUIRED_TYPES as readonly string[]).includes(
-        createInvoiceDto.documentType,
-      ) &&
-      !createInvoiceDto.precedingInvoiceRef
-    ) {
-      throw new BadRequestException(
-        `${createInvoiceDto.documentType} requires precedingInvoiceRef (original invoice number).`,
-      );
-    }
-
-    if (
-      (CREDIT_NOTE_DOCUMENT_TYPES as readonly string[]).includes(
-        createInvoiceDto.documentType,
-      ) &&
-      !createInvoiceDto.creditNoteReasonCode
-    ) {
-      throw new BadRequestException(
-        `${createInvoiceDto.documentType} requires creditNoteReasonCode (e.g. DL8.61.1.A).`,
-      );
-    }
-
-    const isAgent =
-      createInvoiceDto.transactionFlags?.disclosedAgentBilling === true ||
-      createInvoiceDto.profileExecutionId?.[5] === '1';
-    if (isAgent && !createInvoiceDto.principalTrn) {
-      throw new BadRequestException(
-        'principalTrn is required when disclosed agent billing is used.',
-      );
-    }
-  }
-
-  private assertPartyAddress(
-    party: CreateInvoiceDto['seller'],
-    label: 'seller' | 'buyer',
-  ) {
-    const a = party.address;
-    if (!a?.line1?.trim() || !a.city?.trim() || !a.state?.trim() || !a.countryCode?.trim()) {
-      throw new BadRequestException(
-        `${label}.address must include line1, city, state (emirate), and countryCode (Evatra address fields).`,
-      );
-    }
-  }
-
-  private assertLegalRegistration(
-    party: CreateInvoiceDto['seller'],
-    label: 'seller' | 'buyer',
-  ) {
-    const lr = party.legalRegistration;
-    const id =
-      lr?.tradeLicense?.trim() ||
-      lr?.emiratesId?.trim() ||
-      lr?.passport?.trim() ||
-      lr?.commercialRegistration?.trim();
-
-    if (!id) {
-      throw new BadRequestException(
-        `${label}.legalRegistration requires one of tradeLicense, emiratesId, passport, or commercialRegistration (Evatra BT-30/BT-41).`,
-      );
-    }
-
-    if (!lr?.schemeAgencyName?.trim()) {
-      throw new BadRequestException(
-        `${label}.legalRegistration.schemeAgencyName is required (Evatra BTAE-12).`,
-      );
-    }
   }
 
   private extractPassthroughFields(dto: CreateInvoiceDto): Record<string, unknown> {

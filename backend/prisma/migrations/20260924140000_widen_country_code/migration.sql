@@ -1,0 +1,2 @@
+ALTER TABLE [invoices] ALTER COLUMN [sellerCountryCode] NVARCHAR(100) NOT NULL;
+ALTER TABLE [invoices] ALTER COLUMN [buyerCountryCode] NVARCHAR(100) NOT NULL;
