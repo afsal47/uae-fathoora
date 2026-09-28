@@ -69,7 +69,16 @@ export class SecretsCryptoService {
     if (value == null) {
       return null;
     }
-    const plain = this.decrypt(value) ?? value;
+    let plain: string;
+    try {
+      plain = this.decrypt(value) ?? value;
+    } catch (err) {
+      this.logger.warn(
+        `Cannot decrypt secret for display (${err instanceof Error ? err.message : 'unknown'}). ` +
+          'Restore backend/.data/secrets.key or re-save the secret in admin.',
+      );
+      return '****';
+    }
     if (plain.length <= visible) {
       return '****';
     }
