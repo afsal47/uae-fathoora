@@ -78,7 +78,8 @@ export class CreateTenantDto {
 
   @ApiPropertyOptional({
     default: 'FAKE',
-    description: 'ASP provider name (FAKE for testing, CLEARTAX etc. for production)',
+    description:
+      'Selected ASP for this tenant only. FAKE/MOCK stay local. CLEARTAX uses the ClearTax API. Any other name posts XML to aspBaseUrl.',
   })
   @IsOptional()
   @IsString()
