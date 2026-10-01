@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ClearTaxAdapter } from './cleartax.adapter';
+import { GenericAspAdapter } from './generic-asp.adapter';
 import { MockAspAdapter } from './mock-asp.adapter';
 import { AspProviderAdapter } from './asp.types';
 
@@ -10,6 +11,7 @@ export class AspProviderResolverService {
   constructor(
     private readonly mockAspAdapter: MockAspAdapter,
     private readonly clearTaxAdapter: ClearTaxAdapter,
+    private readonly genericAspAdapter: GenericAspAdapter,
   ) {
     this.providers = new Map<string, AspProviderAdapter>([
       ['FAKE', mockAspAdapter],
@@ -19,12 +21,6 @@ export class AspProviderResolverService {
   }
 
   resolve(provider: string) {
-    const adapter = this.providers.get(provider.toUpperCase());
-
-    if (!adapter) {
-      throw new NotFoundException(`ASP provider ${provider} is not supported.`);
-    }
-
-    return adapter;
+    return this.providers.get(provider.toUpperCase()) ?? this.genericAspAdapter;
   }
 }

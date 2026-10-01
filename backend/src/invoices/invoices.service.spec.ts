@@ -52,7 +52,8 @@ describe('InvoicesService', () => {
       {
         description: 'Policy fee',
         quantity: 1,
-        unitPrice: 100,
+        // Tax-inclusive unit price (100 net + 5% VAT)
+        unitPrice: 105,
         vatRate: 5,
         vatCategory: 'S',
       },
@@ -94,7 +95,36 @@ describe('InvoicesService', () => {
 
     const invoice = await service.create(createInvoiceDto);
 
-    expect(prisma.invoice.create).toHaveBeenCalled();
+    expect(prisma.invoice.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          subtotalAmount: expect.anything(),
+          taxAmount: expect.anything(),
+          totalAmount: expect.anything(),
+          lines: {
+            create: [
+              expect.objectContaining({
+                // Inclusive 105 @ 5% → net 100, tax 5, total 105
+                unitPrice: expect.anything(),
+                netAmount: expect.anything(),
+                taxAmount: expect.anything(),
+                totalAmount: expect.anything(),
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+
+    const createArg = prisma.invoice.create.mock.calls[0][0];
+    expect(Number(createArg.data.subtotalAmount)).toBe(100);
+    expect(Number(createArg.data.taxAmount)).toBe(5);
+    expect(Number(createArg.data.totalAmount)).toBe(105);
+    expect(Number(createArg.data.lines.create[0].unitPrice)).toBe(100);
+    expect(Number(createArg.data.lines.create[0].netAmount)).toBe(100);
+    expect(Number(createArg.data.lines.create[0].taxAmount)).toBe(5);
+    expect(Number(createArg.data.lines.create[0].totalAmount)).toBe(105);
+
     expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
     expect(invoice.status).toBe('QUEUED');
   });
@@ -140,6 +170,30 @@ describe('InvoicesService', () => {
 
     expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
     expect(invoice.status).toBe('QUEUED');
+  });
+
+  it('maps IBMS againstDCNoteId and reasonCode onto credit note fields', async () => {
+    const { service, prisma } = createService();
+
+    await service.create({
+      ...createInvoiceDto,
+      documentType: 'CREDIT_NOTE',
+      invoiceNumber: 'CN-1',
+      sourceDocumentId: 'CN-1',
+      idempotencyKey: 'cn-idem-1',
+      againstDCNoteId: 'INV-ORIGINAL-99',
+      reasonCode: 'DL8.61.1.A',
+    });
+
+    const createArg = prisma.invoice.create.mock.calls[0][0];
+    const aspPayload = JSON.parse(createArg.data.aspPayload);
+    expect(aspPayload.passthrough.againstDCNoteId).toBe('INV-ORIGINAL-99');
+    expect(aspPayload.passthrough.creditNoteReasonCode).toBe('DL8.61.1.A');
+    expect(aspPayload.passthrough.reasonCode).toBe('DL8.61.1.A');
+    expect(aspPayload.passthrough.precedingInvoiceRef).toEqual({
+      id: 'INV-ORIGINAL-99',
+      issueDate: undefined,
+    });
   });
 
   it('accepts a tax invoice when address and legal registration are omitted', async () => {

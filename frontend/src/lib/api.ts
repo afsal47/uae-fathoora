@@ -94,30 +94,108 @@ export type InvoiceLine = {
   totalAmount: string;
 };
 
+/** Extra fields from the source-system create payload (stored as ASP passthrough). */
+export type InvoiceSourcePayload = {
+  taxPointDate?: string;
+  dueDate?: string;
+  taxCurrencyCode?: string;
+  accountingCost?: string;
+  contractReference?: string;
+  paymentMeans?: Record<string, unknown>;
+  paymentTerms?: Record<string, unknown>;
+  delivery?: Record<string, unknown>;
+  invoicePeriod?: Record<string, unknown>;
+  precedingInvoiceRef?: { id?: string; issueDate?: string; [key: string]: unknown };
+  againstDCNoteId?: string;
+  creditNoteReasonCode?: string;
+  reasonCode?: string;
+  orderReference?: Record<string, unknown>;
+  allowanceCharges?: Record<string, unknown>[];
+  transactionFlags?: Record<string, unknown>;
+  profileExecutionId?: string;
+  principalTrn?: string;
+  exchangeRate?: number;
+  taxInclusiveAmountInAed?: number;
+  references?: Record<string, unknown>;
+  seller?: {
+    endpointId?: string;
+    endpointScheme?: string;
+    legalRegistration?: Record<string, unknown>;
+    contact?: Record<string, unknown>;
+    addressLine3?: string;
+  };
+  buyer?: {
+    endpointId?: string;
+    endpointScheme?: string;
+    legalRegistration?: Record<string, unknown>;
+    contact?: Record<string, unknown>;
+    addressLine3?: string;
+  };
+  lines?: Array<{
+    unitCode?: string;
+    itemDescription?: string;
+    vatExemptionReason?: string;
+    vatExemptionReasonCode?: string;
+    rcmNatureCode?: string;
+    classificationId?: string;
+    classificationScheme?: string;
+    accountingCost?: string;
+    orderLineReferenceId?: string;
+    invoicePeriod?: Record<string, unknown>;
+    allowanceCharges?: Record<string, unknown>[];
+  }>;
+  [key: string]: unknown;
+};
+
 export type Invoice = {
   id: string;
   tenantId: string;
   integrationId: string;
   sourceSystem: string;
   sourceDocumentId: string;
+  idempotencyKey?: string;
   invoiceNumber: string;
   documentType: string;
   status: string;
   issueDate: string;
   currencyCode: string;
   sellerName: string;
+  sellerTrn?: string | null;
+  sellerAddressLine1?: string | null;
+  sellerAddressLine2?: string | null;
+  sellerCity?: string | null;
+  sellerState?: string | null;
+  sellerPostalCode?: string | null;
+  sellerCountryCode?: string;
   buyerName: string;
+  buyerTrn?: string | null;
+  buyerAddressLine1?: string | null;
+  buyerAddressLine2?: string | null;
+  buyerCity?: string | null;
+  buyerState?: string | null;
+  buyerPostalCode?: string | null;
+  buyerCountryCode?: string;
   subtotalAmount: string;
   taxAmount: string;
   totalAmount: string;
+  notes?: string | null;
   aspMessageId: string | null;
   aspReferenceId: string | null;
+  aspResponse?: string | null;
   submissionAttempts: number;
   lastSubmissionError: string | null;
+  lastSubmissionAt?: string | null;
   rejectionReason: string | null;
+  submittedAt?: string | null;
+  acceptedAt?: string | null;
+  rejectedAt?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
+  updatedAt?: string;
   lines: InvoiceLine[];
   events: InvoiceEvent[];
+  /** Parsed source-system pass-through fields from create request */
+  sourcePayload?: InvoiceSourcePayload | null;
 };
 
 export const tenantApi = {

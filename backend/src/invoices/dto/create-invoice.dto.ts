@@ -387,7 +387,11 @@ class InvoiceLineDto {
   @MaxLength(10)
   unitCode?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Tax-inclusive unit price from the source system. Hub extracts net amount and VAT for PINT-AE.',
+    example: 105,
+  })
   @Type(() => Number)
   @IsNumber()
   @Min(0)
@@ -653,6 +657,16 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
+      'IBMS alias for preceding invoice / against DC note id (maps to precedingInvoiceRef.id)',
+    example: 'INV-100245',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  againstDCNoteId?: string;
+
+  @ApiPropertyOptional({
+    description:
       'Credit note reason code (BTAE-03), e.g. DL8.61.1.A — required for credit note types',
     example: 'DL8.61.1.A',
   })
@@ -660,6 +674,16 @@ export class CreateInvoiceDto {
   @IsString()
   @MaxLength(50)
   creditNoteReasonCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'IBMS alias for credit note reason code (maps to creditNoteReasonCode / BTAE-03)',
+    example: 'DL8.61.1.A',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  reasonCode?: string;
 
   @ApiPropertyOptional({ type: OrderReferenceDto })
   @IsOptional()

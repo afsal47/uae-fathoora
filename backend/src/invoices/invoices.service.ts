@@ -29,6 +29,8 @@ export class InvoicesService {
   ) {}
 
   async create(createInvoiceDto: CreateInvoiceDto) {
+    createInvoiceDto = this.normalizeCreditNoteFields(createInvoiceDto);
+
     const { tenant, integration } = await this.getTenantIntegration(
       createInvoiceDto.tenantCode,
       createInvoiceDto.sourceSystem,
@@ -55,23 +57,36 @@ export class InvoicesService {
     }
 
     const computedLines = createInvoiceDto.lines.map((line, index) => {
-      const netAmount = this.round(line.quantity * line.unitPrice);
       const cat = line.vatCategory.toUpperCase();
+      const vatRate =
+        cat === 'AE' && line.vatRate === 0 ? 5 : line.vatRate;
+      // Source systems send tax-inclusive unit prices.
+      const grossAmount = this.round(line.quantity * line.unitPrice);
+      let netAmount: number;
+      let taxAmount: number;
+      let totalAmount: number;
+
       // AE/E/O: no VAT charged on the invoice document (buyer accounts for AE)
-      const taxAmount = isZeroChargedVatCategory(cat)
-        ? 0
-        : this.round((netAmount * line.vatRate) / 100);
-      const totalAmount = this.round(netAmount + taxAmount);
+      if (isZeroChargedVatCategory(cat) || vatRate === 0) {
+        netAmount = grossAmount;
+        taxAmount = 0;
+        totalAmount = grossAmount;
+      } else {
+        netAmount = this.round(grossAmount / (1 + vatRate / 100));
+        taxAmount = this.round(grossAmount - netAmount);
+        totalAmount = grossAmount;
+      }
+
+      // Persist Peppol net unit price (BT-146), derived from the inclusive input.
+      const netUnitPrice = this.round(netAmount / line.quantity);
 
       return {
         lineNumber: index + 1,
         description: line.description,
         quantity: new Prisma.Decimal(line.quantity),
-        unitPrice: new Prisma.Decimal(line.unitPrice),
+        unitPrice: new Prisma.Decimal(netUnitPrice),
         netAmount: new Prisma.Decimal(netAmount),
-        vatRate: new Prisma.Decimal(
-          cat === 'AE' && line.vatRate === 0 ? 5 : line.vatRate,
-        ),
+        vatRate: new Prisma.Decimal(vatRate),
         vatCategory: line.vatCategory,
         taxAmount: new Prisma.Decimal(taxAmount),
         totalAmount: new Prisma.Decimal(totalAmount),
@@ -173,7 +188,7 @@ export class InvoicesService {
   }
 
   async findAll(sourceDocumentId?: string) {
-    return this.prisma.invoice.findMany({
+    const invoices = await this.prisma.invoice.findMany({
       where: sourceDocumentId ? { sourceDocumentId } : undefined,
       include: {
         lines: true,
@@ -183,6 +198,8 @@ export class InvoicesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return invoices.map((invoice) => this.withSourcePayload(invoice));
   }
 
   async findOne(id: string) {
@@ -200,7 +217,7 @@ export class InvoicesService {
       throw new NotFoundException(`Invoice ${id} was not found.`);
     }
 
-    return invoice;
+    return this.withSourcePayload(invoice);
   }
 
   async getStatus(id: string) {
@@ -235,7 +252,7 @@ export class InvoicesService {
   }
 
   async findAllForIntegration(integrationId: string, sourceDocumentId?: string) {
-    return this.prisma.invoice.findMany({
+    const invoices = await this.prisma.invoice.findMany({
       where: {
         integrationId,
         ...(sourceDocumentId ? { sourceDocumentId } : {}),
@@ -246,6 +263,8 @@ export class InvoicesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return invoices.map((invoice) => this.withSourcePayload(invoice));
   }
 
   async findOneForIntegration(integrationId: string, id: string) {
@@ -261,7 +280,7 @@ export class InvoicesService {
       throw new NotFoundException(`Invoice ${id} was not found.`);
     }
 
-    return invoice;
+    return this.withSourcePayload(invoice);
   }
 
   async getXmlForIntegration(integrationId: string, id: string): Promise<string> {
@@ -391,6 +410,44 @@ export class InvoicesService {
     return { tenant, integration };
   }
 
+  /**
+   * Expose source-system pass-through as a structured object for API/UI consumers.
+   * Omits raw aspPayload (can include large ASP submission XML).
+   */
+  private withSourcePayload<T extends { aspPayload?: string | null }>(invoice: T) {
+    const { aspPayload, ...rest } = invoice;
+    return {
+      ...rest,
+      sourcePayload: parseAspPassthrough(aspPayload) ?? null,
+    };
+  }
+
+  /**
+   * Map IBMS aliases (againstDCNoteId / reasonCode) onto canonical Peppol fields.
+   */
+  private normalizeCreditNoteFields(dto: CreateInvoiceDto): CreateInvoiceDto {
+    const againstDCNoteId =
+      dto.againstDCNoteId?.trim() || dto.precedingInvoiceRef?.id?.trim() || undefined;
+    const creditNoteReasonCode =
+      dto.creditNoteReasonCode?.trim() || dto.reasonCode?.trim() || undefined;
+
+    const precedingInvoiceRef =
+      againstDCNoteId
+        ? {
+            id: againstDCNoteId,
+            issueDate: dto.precedingInvoiceRef?.issueDate,
+          }
+        : dto.precedingInvoiceRef;
+
+    return {
+      ...dto,
+      againstDCNoteId,
+      reasonCode: creditNoteReasonCode,
+      creditNoteReasonCode,
+      precedingInvoiceRef,
+    };
+  }
+
   private extractPassthroughFields(dto: CreateInvoiceDto): Record<string, unknown> {
     return {
       taxPointDate: dto.taxPointDate,
@@ -403,7 +460,9 @@ export class InvoicesService {
       delivery: dto.delivery,
       invoicePeriod: dto.invoicePeriod,
       precedingInvoiceRef: dto.precedingInvoiceRef,
+      againstDCNoteId: dto.againstDCNoteId ?? dto.precedingInvoiceRef?.id,
       creditNoteReasonCode: dto.creditNoteReasonCode,
+      reasonCode: dto.reasonCode ?? dto.creditNoteReasonCode,
       orderReference: dto.orderReference,
       allowanceCharges: dto.allowanceCharges,
       transactionFlags: dto.transactionFlags,
@@ -411,6 +470,7 @@ export class InvoicesService {
       principalTrn: dto.principalTrn,
       exchangeRate: dto.exchangeRate,
       taxInclusiveAmountInAed: dto.taxInclusiveAmountInAed,
+      references: dto.references,
       seller: {
         endpointId: dto.seller.endpointId,
         endpointScheme: dto.seller.endpointScheme,
