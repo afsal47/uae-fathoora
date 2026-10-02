@@ -26,7 +26,7 @@ export type AspSubmissionResult = {
 
 export type ParsedWebhookPayload = {
   tenantCode: string;
-  invoiceId?: string;
+  invoiceId?: number;
   aspReferenceId?: string;
   aspMessageId?: string;
   status: Extract<

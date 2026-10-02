@@ -107,6 +107,7 @@ export type InvoiceSourcePayload = {
   invoicePeriod?: Record<string, unknown>;
   precedingInvoiceRef?: { id?: string; issueDate?: string; [key: string]: unknown };
   againstDCNoteId?: string;
+  againstCreditNoteId?: string;
   creditNoteReasonCode?: string;
   reasonCode?: string;
   orderReference?: Record<string, unknown>;
@@ -148,13 +149,14 @@ export type InvoiceSourcePayload = {
 };
 
 export type Invoice = {
-  id: string;
+  id: number;
   tenantId: string;
   integrationId: string;
   sourceSystem: string;
   sourceDocumentId: string;
   idempotencyKey?: string;
   invoiceNumber: string;
+  sourceSystemCreditNoteId?: string | null;
   documentType: string;
   status: string;
   issueDate: string;
@@ -216,7 +218,8 @@ export const integrationApi = {
 
 export const invoiceApi = {
   list: () => api.get<Invoice[]>('/admin/invoices').then(r => r.data),
-  get: (id: string) => api.get<Invoice>(`/admin/invoices/${id}`).then(r => r.data),
+  get: (id: number | string) =>
+    api.get<Invoice>(`/admin/invoices/${id}`).then((r) => r.data),
 };
 
 export default api;

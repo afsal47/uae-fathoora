@@ -16,7 +16,7 @@ export class AspWebhooksController {
       type: 'object',
       properties: {
         tenantCode: { type: 'string', example: 'CITY_MARINE' },
-        invoiceId: { type: 'string' },
+        invoiceId: { type: 'integer', example: 1 },
         aspReferenceId: { type: 'string' },
         aspMessageId: { type: 'string' },
         status: {

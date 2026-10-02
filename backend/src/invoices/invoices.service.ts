@@ -1,11 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Integration, Invoice, InvoiceLine, Prisma, Tenant } from '@prisma/client';
-import { buildPintAePayload } from '../asp/pint-ae-payload.builder';
+import {
+  buildPintAePayload,
+  toPeppolInvoiceNumber,
+} from '../asp/pint-ae-payload.builder';
 import { buildPintAeXml } from '../asp/pint-ae-xml.builder';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import {
+  PRECEDING_REF_REQUIRED_TYPES,
   isZeroChargedVatCategory,
   resolveDocumentTypeFromTaxMix,
 } from './document-type.constants';
@@ -34,6 +42,11 @@ export class InvoicesService {
     const { tenant, integration } = await this.getTenantIntegration(
       createInvoiceDto.tenantCode,
       createInvoiceDto.sourceSystem,
+    );
+
+    createInvoiceDto = await this.resolvePrecedingHubInvoice(
+      tenant.id,
+      createInvoiceDto,
     );
 
     const existing = await this.prisma.invoice.findUnique({
@@ -115,6 +128,13 @@ export class InvoicesService {
         ? ` Document type resolved from ${createInvoiceDto.documentType} to ${resolvedDocumentType} based on line VAT mix.`
         : '';
 
+    // IBMS document / credit-note number → dedicated column; hub Peppol ID is sequential.
+    const sourceSystemCreditNoteId =
+      createInvoiceDto.sourceSystemCreditNoteId?.trim() ||
+      createInvoiceDto.invoiceNumber?.trim() ||
+      undefined;
+    const hubInvoiceNumber = await this.allocateHubInvoiceNumber(tenant.id);
+
     const invoice = await this.prisma.invoice.create({
       data: {
         tenantId: tenant.id,
@@ -122,7 +142,8 @@ export class InvoicesService {
         sourceSystem: createInvoiceDto.sourceSystem,
         sourceDocumentId: createInvoiceDto.sourceDocumentId,
         idempotencyKey: createInvoiceDto.idempotencyKey,
-        invoiceNumber: createInvoiceDto.invoiceNumber,
+        invoiceNumber: hubInvoiceNumber,
+        sourceSystemCreditNoteId,
         documentType: resolvedDocumentType,
         status: INVOICE_STATUS.QUEUED,
         issueDate: new Date(createInvoiceDto.issueDate),
@@ -202,7 +223,7 @@ export class InvoicesService {
     return invoices.map((invoice) => this.withSourcePayload(invoice));
   }
 
-  async findOne(id: string) {
+  async findOne(id: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       include: {
@@ -220,7 +241,7 @@ export class InvoicesService {
     return this.withSourcePayload(invoice);
   }
 
-  async getStatus(id: string) {
+  async getStatus(id: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       select: {
@@ -267,7 +288,7 @@ export class InvoicesService {
     return invoices.map((invoice) => this.withSourcePayload(invoice));
   }
 
-  async findOneForIntegration(integrationId: string, id: string) {
+  async findOneForIntegration(integrationId: string, id: number) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, integrationId },
       include: {
@@ -283,7 +304,7 @@ export class InvoicesService {
     return this.withSourcePayload(invoice);
   }
 
-  async getXmlForIntegration(integrationId: string, id: string): Promise<string> {
+  async getXmlForIntegration(integrationId: string, id: number): Promise<string> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, integrationId },
       include: {
@@ -349,7 +370,7 @@ export class InvoicesService {
     } as CreateInvoiceDto;
   }
 
-  async getStatusForIntegration(integrationId: string, id: string) {
+  async getStatusForIntegration(integrationId: string, id: number) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, integrationId },
       select: {
@@ -423,28 +444,102 @@ export class InvoicesService {
   }
 
   /**
-   * Map IBMS aliases (againstDCNoteId / reasonCode) onto canonical Peppol fields.
+   * Atomically allocate the next hub Peppol invoice number for a tenant (inv-1, inv-2, …).
+   */
+  private async allocateHubInvoiceNumber(tenantId: string): Promise<string> {
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { invoiceSequence: { increment: 1 } },
+      select: { invoiceSequence: true },
+    });
+    return toPeppolInvoiceNumber(String(updated.invoiceSequence));
+  }
+
+  /**
+   * Map IBMS aliases (againstCreditNoteId / againstDCNoteId / reasonCode)
+   * onto canonical fields. precedingInvoiceRef.id is resolved later via hub lookup.
    */
   private normalizeCreditNoteFields(dto: CreateInvoiceDto): CreateInvoiceDto {
     const againstDCNoteId =
-      dto.againstDCNoteId?.trim() || dto.precedingInvoiceRef?.id?.trim() || undefined;
+      dto.againstCreditNoteId?.trim() ||
+      dto.againstDCNoteId?.trim() ||
+      dto.precedingInvoiceRef?.id?.trim() ||
+      undefined;
     const creditNoteReasonCode =
       dto.creditNoteReasonCode?.trim() || dto.reasonCode?.trim() || undefined;
 
-    const precedingInvoiceRef =
-      againstDCNoteId
-        ? {
-            id: againstDCNoteId,
-            issueDate: dto.precedingInvoiceRef?.issueDate,
-          }
-        : dto.precedingInvoiceRef;
-
     return {
       ...dto,
+      againstCreditNoteId: againstDCNoteId,
       againstDCNoteId,
       reasonCode: creditNoteReasonCode,
       creditNoteReasonCode,
-      precedingInvoiceRef,
+    };
+  }
+
+  /**
+   * IBMS sends againstCreditNoteId as the source-system number of an existing hub
+   * invoice. Look it up and set precedingInvoiceRef.id to that invoice's hub Peppol
+   * invoiceNumber (inv-N) for BillingReference in XML.
+   */
+  private async resolvePrecedingHubInvoice(
+    tenantId: string,
+    dto: CreateInvoiceDto,
+  ): Promise<CreateInvoiceDto> {
+    const againstId =
+      dto.againstCreditNoteId?.trim() ||
+      dto.againstDCNoteId?.trim() ||
+      dto.precedingInvoiceRef?.id?.trim() ||
+      undefined;
+
+    const requiresPreceding = (
+      PRECEDING_REF_REQUIRED_TYPES as readonly string[]
+    ).includes(dto.documentType);
+
+    if (!againstId) {
+      if (requiresPreceding) {
+        throw new BadRequestException(
+          'Credit/debit notes require againstCreditNoteId (or againstDCNoteId / precedingInvoiceRef.id) referencing an existing hub invoice.',
+        );
+      }
+      return dto;
+    }
+
+    const peppolAgainstId = toPeppolInvoiceNumber(againstId);
+    const preceding = await this.prisma.invoice.findFirst({
+      where: {
+        tenantId,
+        OR: [
+          { sourceSystemCreditNoteId: againstId },
+          { invoiceNumber: againstId },
+          { invoiceNumber: peppolAgainstId },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        invoiceNumber: true,
+        issueDate: true,
+      },
+    });
+
+    if (!preceding) {
+      throw new BadRequestException(
+        `No hub invoice found for againstCreditNoteId="${againstId}". Submit the original invoice first.`,
+      );
+    }
+
+    const issueDate =
+      dto.precedingInvoiceRef?.issueDate ||
+      preceding.issueDate.toISOString().slice(0, 10);
+
+    return {
+      ...dto,
+      againstCreditNoteId: againstId,
+      againstDCNoteId: againstId,
+      precedingInvoiceRef: {
+        id: preceding.invoiceNumber,
+        issueDate,
+      },
     };
   }
 
@@ -460,7 +555,10 @@ export class InvoicesService {
       delivery: dto.delivery,
       invoicePeriod: dto.invoicePeriod,
       precedingInvoiceRef: dto.precedingInvoiceRef,
-      againstDCNoteId: dto.againstDCNoteId ?? dto.precedingInvoiceRef?.id,
+      againstDCNoteId: dto.againstDCNoteId,
+      againstCreditNoteId: dto.againstCreditNoteId ?? dto.againstDCNoteId,
+      sourceSystemCreditNoteId:
+        dto.sourceSystemCreditNoteId?.trim() || dto.invoiceNumber?.trim(),
       creditNoteReasonCode: dto.creditNoteReasonCode,
       reasonCode: dto.reasonCode ?? dto.creditNoteReasonCode,
       orderReference: dto.orderReference,

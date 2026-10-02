@@ -5,6 +5,7 @@ import {
   Get,
   Header,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   Req,
@@ -68,14 +69,20 @@ export class InvoicesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get one invoice by id' })
-  findOne(@Req() req: AuthedRequest, @Param('id') id: string) {
+  @ApiOperation({ summary: 'Get one invoice by numeric hub id' })
+  findOne(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.invoicesService.findOneForIntegration(req.integration.id, id);
   }
 
   @Get(':id/status')
   @ApiOperation({ summary: 'Get invoice processing status' })
-  getStatus(@Req() req: AuthedRequest, @Param('id') id: string) {
+  getStatus(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.invoicesService.getStatusForIntegration(req.integration.id, id);
   }
 
@@ -83,13 +90,19 @@ export class InvoicesController {
   @ApiOperation({ summary: 'Get Peppol PINT-AE XML for an invoice' })
   @ApiProduces('application/xml')
   @Header('Content-Type', 'application/xml; charset=utf-8')
-  getXml(@Req() req: AuthedRequest, @Param('id') id: string) {
+  getXml(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.invoicesService.getXmlForIntegration(req.integration.id, id);
   }
 
   @Post(':id/requeue')
   @ApiOperation({ summary: 'Requeue a failed invoice for ASP submission' })
-  async requeue(@Req() req: AuthedRequest, @Param('id') id: string) {
+  async requeue(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     await this.invoicesService.findOneForIntegration(req.integration.id, id);
     return this.invoiceProcessingService.requeueInvoice(id);
   }

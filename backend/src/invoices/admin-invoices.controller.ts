@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { InvoicesService } from './invoices.service';
@@ -19,14 +26,14 @@ export class AdminInvoicesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get invoice by ID (admin)' })
-  findOne(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get invoice by numeric hub id (admin)' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
     return this.invoicesService.findOne(id);
   }
-// ,,
+
   @Get(':id/status')
   @ApiOperation({ summary: 'Get invoice status (admin)' })
-  getStatus(@Param('id') id: string) {
+  getStatus(@Param('id', ParseIntPipe) id: number) {
     return this.invoicesService.getStatus(id);
   }
 }

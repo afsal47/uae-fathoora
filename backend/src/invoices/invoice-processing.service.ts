@@ -30,7 +30,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 @Injectable()
 export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(InvoiceProcessingService.name);
-  private worker?: Worker<{ invoiceId: string }>;
+  private worker?: Worker<{ invoiceId: number }>;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -73,7 +73,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async processSubmission(invoiceId: string) {
+  async processSubmission(invoiceId: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
@@ -210,7 +210,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async requeueInvoice(invoiceId: string) {
+  async requeueInvoice(invoiceId: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
     });

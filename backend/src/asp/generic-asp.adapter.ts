@@ -102,7 +102,7 @@ export class GenericAspAdapter implements AspProviderAdapter {
 
     return {
       tenantCode: tenantCode.trim(),
-      invoiceId: this.optionalString(payload.invoiceId),
+      invoiceId: this.optionalInvoiceId(payload.invoiceId),
       aspReferenceId:
         this.optionalString(payload.aspReferenceId) ?? this.optionalString(payload.referenceId),
       aspMessageId: this.optionalString(payload.aspMessageId) ?? this.optionalString(payload.uuid),
@@ -141,5 +141,15 @@ export class GenericAspAdapter implements AspProviderAdapter {
 
   private optionalString(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private optionalInvoiceId(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+      return Number(value.trim());
+    }
+    return undefined;
   }
 }

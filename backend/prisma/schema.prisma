@@ -29,11 +29,13 @@ model Tenant {
   aspBaseUrl      String?       @db.NVarChar(500)
   aspApiKey       String?       @db.NVarChar(500)
   aspWebhookToken String?       @db.NVarChar(500)
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  integrations    Integration[]
-  invoices        Invoice[]
+  isActive         Boolean       @default(true)
+  /** Next hub Peppol invoice number (inv-N); incremented on each create. */
+  invoiceSequence  Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  integrations     Integration[]
+  invoices         Invoice[]
 
   @@map("tenants")
 }
@@ -60,14 +62,18 @@ model Integration {
 }
 
 model Invoice {
-  id                  String         @id @default(uuid())
-  tenantId            String
-  integrationId       String
-  sourceSystem        String         @db.NVarChar(100)
-  sourceDocumentId    String         @db.NVarChar(100)
-  idempotencyKey      String         @db.NVarChar(200)
-  invoiceNumber       String         @db.NVarChar(100)
-  documentType        String         @db.NVarChar(50)
+  /** Hub numeric primary key (auto-increment). */
+  id                        Int            @id @default(autoincrement())
+  tenantId                  String
+  integrationId             String
+  sourceSystem              String         @db.NVarChar(100)
+  sourceDocumentId          String         @db.NVarChar(100)
+  idempotencyKey            String         @db.NVarChar(200)
+  /** Hub-generated Peppol cbc:ID, e.g. inv-1, inv-2, … */
+  invoiceNumber             String         @db.NVarChar(100)
+  /** Source-system document / credit-note number (IBMS), e.g. 119 */
+  sourceSystemCreditNoteId  String?        @db.NVarChar(100)
+  documentType              String         @db.NVarChar(50)
   status              String         @default("DRAFT") @db.NVarChar(50)
   issueDate           DateTime
   currencyCode        String         @default("AED") @db.NVarChar(3)
@@ -120,7 +126,7 @@ model Invoice {
 
 model InvoiceLine {
   id               String   @id @default(uuid())
-  invoiceId        String
+  invoiceId        Int
   lineNumber       Int
   description      String   @db.NVarChar(500)
   quantity         Decimal  @db.Decimal(18, 4)
@@ -140,7 +146,7 @@ model InvoiceLine {
 
 model InvoiceEvent {
   id            String      @id @default(uuid())
-  invoiceId     String
+  invoiceId     Int
   type          String       @db.NVarChar(50)
   fromStatus    String?      @db.NVarChar(50)
   toStatus      String?      @db.NVarChar(50)
@@ -156,7 +162,7 @@ model InvoiceEvent {
 model WebhookDelivery {
   id              String   @id @default(uuid())
   integrationId   String
-  invoiceId       String
+  invoiceId       Int
   event           String   @db.NVarChar(100)
   payload         String   @db.NVarChar(Max)
   status          String   @default("PENDING") @db.NVarChar(50)
