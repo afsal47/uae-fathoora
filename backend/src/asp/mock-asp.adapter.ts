@@ -49,7 +49,7 @@ export class MockAspAdapter implements AspProviderAdapter {
 
     return {
       tenantCode,
-      invoiceId: this.readOptionalString(payload.invoiceId),
+      invoiceId: this.readOptionalInvoiceId(payload.invoiceId),
       aspReferenceId: this.readOptionalString(payload.aspReferenceId),
       aspMessageId: this.readOptionalString(payload.aspMessageId),
       status: status as ParsedWebhookPayload['status'],
@@ -71,5 +71,15 @@ export class MockAspAdapter implements AspProviderAdapter {
 
   private readOptionalString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private readOptionalInvoiceId(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+      return Number(value.trim());
+    }
+    return undefined;
   }
 }

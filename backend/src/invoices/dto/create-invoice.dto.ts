@@ -548,10 +548,27 @@ export class CreateInvoiceDto {
   @IsEnum(DOCUMENT_TYPES)
   documentType!: DocumentType;
 
-  @ApiProperty({ example: 'INV-100245' })
+  @ApiPropertyOptional({
+    example: '119',
+    description:
+      'Source-system document / credit-note number. Stored as sourceSystemCreditNoteId. Hub ignores this for Peppol ID and auto-assigns invoiceNumber (inv-1, inv-2, …). Prefer sourceSystemCreditNoteId.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  invoiceNumber!: string;
+  @MaxLength(100)
+  invoiceNumber?: string;
+
+  @ApiPropertyOptional({
+    example: '119',
+    description:
+      'IBMS / source-system credit note or document number. Prefer this over invoiceNumber. Hub stores it and generates Peppol invoiceNumber separately.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  sourceSystemCreditNoteId?: string;
 
   @ApiProperty({ example: '100245' })
   @IsString()
@@ -657,13 +674,23 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'IBMS alias for preceding invoice / against DC note id (maps to precedingInvoiceRef.id)',
-    example: 'INV-100245',
+      'IBMS alias for the original invoice source-system number. Hub looks up that invoice and sets precedingInvoiceRef.id to its hub Peppol invoiceNumber (inv-N).',
+    example: '119',
   })
   @IsOptional()
   @IsString()
   @MaxLength(200)
   againstDCNoteId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'IBMS alias for againstDCNoteId — source-system id of the already-submitted hub invoice being credited/debited.',
+    example: '119',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  againstCreditNoteId?: string;
 
   @ApiPropertyOptional({
     description:

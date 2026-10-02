@@ -86,7 +86,7 @@ export class ClearTaxAdapter implements AspProviderAdapter {
 
     return {
       tenantCode: (payload.tenantId as string) ?? (payload.tenantCode as string) ?? '',
-      invoiceId: payload.invoiceId as string | undefined,
+      invoiceId: this.parseInvoiceId(payload.invoiceId),
       aspReferenceId: payload.referenceId as string | undefined,
       aspMessageId: payload.uuid as string | undefined,
       status: status as ParsedWebhookPayload['status'],
@@ -95,5 +95,15 @@ export class ClearTaxAdapter implements AspProviderAdapter {
       rejectionReason: payload.rejectionReason as string | undefined,
       rawPayload: payload,
     };
+  }
+
+  private parseInvoiceId(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+      return Number(value.trim());
+    }
+    return undefined;
   }
 }

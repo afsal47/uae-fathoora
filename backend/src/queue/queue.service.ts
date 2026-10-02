@@ -10,7 +10,7 @@ import {
 } from '../invoices/invoice.constants';
 
 type QueueJobPayload = {
-  invoiceId: string;
+  invoiceId: number;
 };
 
 export type WebhookJobPayload = {
@@ -103,7 +103,7 @@ export class QueueService implements OnModuleDestroy {
     this.webhookInlineProcessor = processor;
   }
 
-  async enqueueInvoiceSubmission(invoiceId: string) {
+  async enqueueInvoiceSubmission(invoiceId: number) {
     const payload = { invoiceId };
 
     if (this.queueMode === 'inline') {

@@ -128,14 +128,20 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
   const src = inv.sourcePayload ?? null;
   const lineExtras = src?.lines ?? [];
   const creditReasonCode = src?.creditNoteReasonCode || src?.reasonCode;
-  const againstDCNoteId = src?.againstDCNoteId || src?.precedingInvoiceRef?.id;
+  const againstDCNoteId =
+    src?.againstCreditNoteId || src?.againstDCNoteId;
+  const precedingHubInvoiceId = src?.precedingInvoiceRef?.id;
 
   return (
     <div className="px-5 pb-5 border-t border-gray-100">
       <Section title="Document">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <Field label="Document Type" value={inv.documentType} />
-          <Field label="Invoice Number" value={inv.invoiceNumber} />
+          <Field label="Hub Invoice Number" value={inv.invoiceNumber} />
+          <Field
+            label="Source System Credit Note ID"
+            value={inv.sourceSystemCreditNoteId || '—'}
+          />
           <Field label="Source Document ID" value={inv.sourceDocumentId} />
           <Field label="Idempotency Key" value={inv.idempotencyKey} />
           <Field label="Issue Date" value={new Date(inv.issueDate).toLocaleDateString()} />
@@ -173,11 +179,21 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
         </div>
       </Section>
 
-      {(isCreditOrDebitNote(inv.documentType) || creditReasonCode || againstDCNoteId) && (
+      {(isCreditOrDebitNote(inv.documentType) ||
+        creditReasonCode ||
+        againstDCNoteId ||
+        precedingHubInvoiceId) && (
         <Section title="Credit / Debit Note">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-amber-50 border border-amber-100 rounded-lg p-3">
             <Field label="Reason Code" value={creditReasonCode || '—'} />
-            <Field label="Against DC Note ID" value={againstDCNoteId || '—'} />
+            <Field
+              label="Against Credit Note ID (IBMS)"
+              value={againstDCNoteId || '—'}
+            />
+            <Field
+              label="Preceding Hub Invoice Number"
+              value={precedingHubInvoiceId || '—'}
+            />
             <Field
               label="Preceding Invoice Issue Date"
               value={src?.precedingInvoiceRef?.issueDate}
