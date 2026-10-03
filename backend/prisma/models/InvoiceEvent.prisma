@@ -1,0 +1,14 @@
+model InvoiceEvent {
+  id            String      @id @default(uuid())
+  invoiceId     Int
+  type          String       @db.NVarChar(50)
+  fromStatus    String?      @db.NVarChar(50)
+  toStatus      String?      @db.NVarChar(50)
+  message       String      @db.NVarChar(1000)
+  payload       String?     @db.NVarChar(Max)
+  createdAt     DateTime    @default(now())
+  invoice       Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, createdAt])
+  @@map("invoice_events")
+}

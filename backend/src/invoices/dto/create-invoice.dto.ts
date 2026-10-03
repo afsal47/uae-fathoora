@@ -551,7 +551,7 @@ export class CreateInvoiceDto {
   @ApiPropertyOptional({
     example: '119',
     description:
-      'Source-system document / credit-note number. Stored as sourceSystemCreditNoteId. Hub ignores this for Peppol ID and auto-assigns invoiceNumber (inv-1, inv-2, …). Prefer sourceSystemCreditNoteId.',
+      'Source-system document / DCNote number. Stored as sourceSystemDCNoteId. Hub ignores this for Peppol ID and auto-assigns invoiceNumber (inv-1, inv-2, …). Prefer sourceSystemDCNoteId.',
   })
   @IsOptional()
   @IsString()
@@ -562,7 +562,18 @@ export class CreateInvoiceDto {
   @ApiPropertyOptional({
     example: '119',
     description:
-      'IBMS / source-system credit note or document number. Prefer this over invoiceNumber. Hub stores it and generates Peppol invoiceNumber separately.',
+      'IBMS / source-system DCNote or document number. Prefer this over invoiceNumber. Hub stores it and generates Peppol invoiceNumber separately.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  sourceSystemDCNoteId?: string;
+
+  @ApiPropertyOptional({
+    example: '119',
+    description:
+      'Alias for sourceSystemDCNoteId (legacy name). Prefer sourceSystemDCNoteId.',
   })
   @IsOptional()
   @IsString()

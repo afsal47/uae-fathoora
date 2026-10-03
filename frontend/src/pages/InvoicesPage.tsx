@@ -124,6 +124,20 @@ function isCreditOrDebitNote(documentType: string) {
   return /CREDIT_NOTE|DEBIT_NOTE/i.test(documentType);
 }
 
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  TAX_INVOICE: 'Standard Tax Invoice',
+  CREDIT_NOTE: 'Standard Credit Note',
+  DEBIT_NOTE: 'Debit Note',
+  SELF_BILLED_TAX_INVOICE: 'Self-Billed Tax Invoice',
+  SELF_BILLED_CREDIT_NOTE: 'Self-Billed Credit Note',
+  COMMERCIAL_INVOICE: 'Commercial Invoice',
+  COMMERCIAL_CREDIT_NOTE: 'Commercial Credit Note',
+};
+
+function formatDocumentType(documentType: string) {
+  return DOCUMENT_TYPE_LABELS[documentType] ?? documentType;
+}
+
 function InvoiceDetails({ inv }: { inv: Invoice }) {
   const src = inv.sourcePayload ?? null;
   const lineExtras = src?.lines ?? [];
@@ -136,11 +150,11 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
     <div className="px-5 pb-5 border-t border-gray-100">
       <Section title="Document">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <Field label="Document Type" value={inv.documentType} />
+          <Field label="Document Type" value={formatDocumentType(inv.documentType)} />
           <Field label="Hub Invoice Number" value={inv.invoiceNumber} />
           <Field
-            label="Source System Credit Note ID"
-            value={inv.sourceSystemCreditNoteId || '—'}
+            label="Source System DCNote"
+            value={inv.sourceSystemDCNoteId || '—'}
           />
           <Field label="Source Document ID" value={inv.sourceDocumentId} />
           <Field label="Idempotency Key" value={inv.idempotencyKey} />

@@ -156,7 +156,7 @@ export type Invoice = {
   sourceDocumentId: string;
   idempotencyKey?: string;
   invoiceNumber: string;
-  sourceSystemCreditNoteId?: string | null;
+  sourceSystemDCNoteId?: string | null;
   documentType: string;
   status: string;
   issueDate: string;

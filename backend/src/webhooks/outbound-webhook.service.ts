@@ -73,7 +73,7 @@ export class OutboundWebhookService implements OnModuleInit, OnModuleDestroy {
       eventId: `${invoice.id}:${event}:${Date.now()}`,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      sourceSystemCreditNoteId: invoice.sourceSystemCreditNoteId,
+      sourceSystemDCNoteId: invoice.sourceSystemDCNoteId,
       status: invoice.status,
       aspMessageId: invoice.aspMessageId,
       aspReferenceId: invoice.aspReferenceId,
