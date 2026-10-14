@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Building2, Cable, FileText, LayoutDashboard, LogOut } from 'lucide-react';
-import { clearAdminKey } from '../lib/api';
+import { clearAdminKey, getApiOrigin } from '../lib/api';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -43,7 +43,7 @@ export default function Layout() {
         </nav>
         <div className="p-4 border-t border-gray-200 space-y-2">
           <a
-            href="http://localhost:3020/docs"
+            href={`${getApiOrigin() || 'http://localhost:3004'}/docs`}
             target="_blank"
             rel="noreferrer"
             className="block text-xs text-gray-400 hover:text-blue-600 transition-colors"

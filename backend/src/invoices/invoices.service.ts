@@ -128,8 +128,9 @@ export class InvoicesService {
         ? ` Document type resolved from ${createInvoiceDto.documentType} to ${resolvedDocumentType} based on line VAT mix.`
         : '';
 
-    // IBMS document / credit-note number → dedicated column; hub Peppol ID is sequential.
-    const sourceSystemCreditNoteId =
+    // IBMS document / DCNote number → dedicated column; hub Peppol ID is sequential.
+    const sourceSystemDCNoteId =
+      createInvoiceDto.sourceSystemDCNoteId?.trim() ||
       createInvoiceDto.sourceSystemCreditNoteId?.trim() ||
       createInvoiceDto.invoiceNumber?.trim() ||
       undefined;
@@ -143,7 +144,7 @@ export class InvoicesService {
         sourceDocumentId: createInvoiceDto.sourceDocumentId,
         idempotencyKey: createInvoiceDto.idempotencyKey,
         invoiceNumber: hubInvoiceNumber,
-        sourceSystemCreditNoteId,
+        sourceSystemDCNoteId,
         documentType: resolvedDocumentType,
         status: INVOICE_STATUS.QUEUED,
         issueDate: new Date(createInvoiceDto.issueDate),
@@ -510,7 +511,7 @@ export class InvoicesService {
       where: {
         tenantId,
         OR: [
-          { sourceSystemCreditNoteId: againstId },
+          { sourceSystemDCNoteId: againstId },
           { invoiceNumber: againstId },
           { invoiceNumber: peppolAgainstId },
         ],
@@ -557,8 +558,10 @@ export class InvoicesService {
       precedingInvoiceRef: dto.precedingInvoiceRef,
       againstDCNoteId: dto.againstDCNoteId,
       againstCreditNoteId: dto.againstCreditNoteId ?? dto.againstDCNoteId,
-      sourceSystemCreditNoteId:
-        dto.sourceSystemCreditNoteId?.trim() || dto.invoiceNumber?.trim(),
+      sourceSystemDCNoteId:
+        dto.sourceSystemDCNoteId?.trim() ||
+        dto.sourceSystemCreditNoteId?.trim() ||
+        dto.invoiceNumber?.trim(),
       creditNoteReasonCode: dto.creditNoteReasonCode,
       reasonCode: dto.reasonCode ?? dto.creditNoteReasonCode,
       orderReference: dto.orderReference,

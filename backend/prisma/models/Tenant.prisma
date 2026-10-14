@@ -1,0 +1,27 @@
+model Tenant {
+  id              String        @id @default(uuid())
+  code            String        @unique @db.NVarChar(100)
+  name            String        @db.NVarChar(200)
+  trn             String?       @db.NVarChar(50)
+  email           String?       @db.NVarChar(200)
+  phone           String?       @db.NVarChar(50)
+  addressLine1    String?       @db.NVarChar(200)
+  addressLine2    String?       @db.NVarChar(200)
+  city            String?       @db.NVarChar(100)
+  state           String?       @db.NVarChar(100)
+  postalCode      String?       @db.NVarChar(50)
+  countryCode     String        @default("AE") @db.NVarChar(2)
+  aspProvider     String        @default("FAKE") @db.NVarChar(50)
+  aspBaseUrl      String?       @db.NVarChar(500)
+  aspApiKey       String?       @db.NVarChar(500)
+  aspWebhookToken String?       @db.NVarChar(500)
+  isActive         Boolean       @default(true)
+  /** Next hub Peppol invoice number (inv-N); incremented on each create. */
+  invoiceSequence  Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  integrations     Integration[]
+  invoices         Invoice[]
+
+  @@map("tenants")
+}

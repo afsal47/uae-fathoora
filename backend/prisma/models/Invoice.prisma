@@ -1,0 +1,62 @@
+model Invoice {
+  /** Hub numeric primary key (auto-increment). */
+  id                        Int            @id @default(autoincrement())
+  tenantId                  String
+  integrationId             String
+  sourceSystem              String         @db.NVarChar(100)
+  sourceDocumentId          String         @db.NVarChar(100)
+  idempotencyKey            String         @db.NVarChar(200)
+  /** Hub-generated Peppol cbc:ID, e.g. inv-1, inv-2, … */
+  invoiceNumber             String         @db.NVarChar(100)
+  /** Source-system document / DCNote number (IBMS), e.g. 119 */
+  sourceSystemDCNoteId  String?        @db.NVarChar(100)
+  documentType              String         @db.NVarChar(50)
+  status              String         @default("DRAFT") @db.NVarChar(50)
+  issueDate           DateTime
+  currencyCode        String         @default("AED") @db.NVarChar(3)
+  sellerName          String         @db.NVarChar(200)
+  sellerTrn           String?        @db.NVarChar(50)
+  sellerAddressLine1  String?        @db.NVarChar(200)
+  sellerAddressLine2  String?        @db.NVarChar(200)
+  sellerCity          String?        @db.NVarChar(100)
+  sellerState         String?        @db.NVarChar(100)
+  sellerPostalCode    String?        @db.NVarChar(50)
+  sellerCountryCode   String         @default("AE") @db.NVarChar(100)
+  buyerName           String         @db.NVarChar(200)
+  buyerTrn            String?        @db.NVarChar(50)
+  buyerAddressLine1   String?        @db.NVarChar(200)
+  buyerAddressLine2   String?        @db.NVarChar(200)
+  buyerCity           String?        @db.NVarChar(100)
+  buyerState          String?        @db.NVarChar(100)
+  buyerPostalCode     String?        @db.NVarChar(50)
+  buyerCountryCode    String         @default("AE") @db.NVarChar(100)
+  subtotalAmount      Decimal        @db.Decimal(18, 2)
+  taxAmount           Decimal        @db.Decimal(18, 2)
+  totalAmount         Decimal        @db.Decimal(18, 2)
+  notes               String?        @db.NVarChar(1000)
+  aspMessageId        String?        @db.NVarChar(100)
+  aspReferenceId      String?        @db.NVarChar(100)
+  aspPayload          String?        @db.NVarChar(Max)
+  aspResponse         String?        @db.NVarChar(Max)
+  submissionAttempts  Int            @default(0)
+  lastSubmissionError String?        @db.NVarChar(2000)
+  lastSubmissionAt    DateTime?
+  rejectionReason     String?        @db.NVarChar(2000)
+  submittedAt         DateTime?
+  acceptedAt          DateTime?
+  rejectedAt          DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  integration         Integration    @relation(fields: [integrationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lines               InvoiceLine[]
+  events              InvoiceEvent[]
+
+  @@unique([tenantId, sourceSystem, sourceDocumentId, documentType])
+  @@unique([tenantId, integrationId, idempotencyKey])
+  @@unique([tenantId, invoiceNumber, documentType])
+  @@index([tenantId, status])
+  @@index([integrationId, sourceDocumentId])
+  @@map("invoices")
+}

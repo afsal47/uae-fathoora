@@ -1,0 +1,20 @@
+model Integration {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  code               String              @db.NVarChar(100)
+  name               String              @db.NVarChar(200)
+  authType           String              @default("API_KEY_HMAC") @db.NVarChar(50)
+  apiKey             String              @db.NVarChar(200)
+  apiSecret          String              @db.NVarChar(500)
+  webhookUrl         String?             @db.NVarChar(500)
+  webhookSecret      String?             @db.NVarChar(500)
+  allowedIpRanges    String?             @db.NVarChar(1000)
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices           Invoice[]
+
+  @@unique([tenantId, code])
+  @@map("integrations")
+}

@@ -1,0 +1,17 @@
+model WebhookDelivery {
+  id              String   @id @default(uuid())
+  integrationId   String
+  invoiceId       Int
+  event           String   @db.NVarChar(100)
+  payload         String   @db.NVarChar(Max)
+  status          String   @default("PENDING") @db.NVarChar(50)
+  attempts        Int      @default(0)
+  lastError       String?  @db.NVarChar(2000)
+  responseCode    Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([invoiceId, createdAt])
+  @@map("webhook_deliveries")
+}
