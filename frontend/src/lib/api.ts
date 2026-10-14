@@ -15,7 +15,7 @@ export function clearAdminKey() {
 }
 
 function resolveApiBaseUrl(): string {
-  const configured = import.meta.env.VITE_APP_URL?.trim();
+  const configured = import.meta.env.VITE_API_URL?.trim();
   if (!configured) {
     return '/v1';
   }
