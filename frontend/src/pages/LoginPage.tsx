@@ -1,21 +1,42 @@
+import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { getAdminKey, setAdminKey, clearAdminKey } from '../lib/api';
+import { getAdminKey, setAdminKey, clearAdminKey, verifyAdminKey } from '../lib/api';
 
 export default function LoginPage() {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
-  const [authed, setAuthed] = useState(!!getAdminKey());
+  const [submitting, setSubmitting] = useState(false);
+  const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
-    setAuthed(!!getAdminKey());
+    const stored = getAdminKey();
+    if (!stored) {
+      return;
+    }
+    let cancelled = false;
+    verifyAdminKey(stored)
+      .then((valid) => {
+        if (cancelled) return;
+        if (!valid) {
+          clearAdminKey();
+          return;
+        }
+        setAuthed(true);
+      })
+      .catch(() => {
+        if (!cancelled) clearAdminKey();
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (authed) {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     const trimmed = key.trim();
@@ -23,8 +44,26 @@ export default function LoginPage() {
       setError('Enter the admin API key');
       return;
     }
-    setAdminKey(trimmed);
-    setAuthed(true);
+    setSubmitting(true);
+    try {
+      const valid = await verifyAdminKey(trimmed);
+      if (!valid) {
+        clearAdminKey();
+        setError('Invalid admin API key');
+        return;
+      }
+      setAdminKey(trimmed);
+      setAuthed(true);
+    } catch (err) {
+      clearAdminKey();
+      if (axios.isAxiosError(err) && !err.response) {
+        setError('Could not reach the server. Try again.');
+      } else {
+        setError('Invalid admin API key');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -46,14 +85,15 @@ export default function LoginPage() {
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="admin-dev-key-change-me"
+          placeholder="Admin API key"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mb-4"
         />
         <button
           type="submit"
-          className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          disabled={submitting}
+          className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
         >
-          Sign in
+          {submitting ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>
@@ -65,8 +105,29 @@ export function RequireAdmin() {
   const [ok, setOk] = useState(false);
 
   useEffect(() => {
-    setOk(!!getAdminKey());
-    setReady(true);
+    const stored = getAdminKey();
+    if (!stored) {
+      setOk(false);
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    verifyAdminKey(stored)
+      .then((valid) => {
+        if (cancelled) return;
+        if (!valid) clearAdminKey();
+        setOk(valid);
+        setReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearAdminKey();
+        setOk(false);
+        setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!ready) {

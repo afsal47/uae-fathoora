@@ -454,7 +454,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     invoiceApi.list().then(setInvoices).catch(() => {}).finally(() => setLoading(false));

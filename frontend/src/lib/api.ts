@@ -14,11 +14,26 @@ export function clearAdminKey() {
   localStorage.removeItem(ADMIN_KEY_STORAGE);
 }
 
-const api = axios.create({ baseURL: '/v1' });
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_APP_URL?.trim();
+  if (!configured) {
+    return '/v1';
+  }
+  const origin = configured.replace(/\/+$/, '');
+  return origin.endsWith('/v1') ? origin : `${origin}/v1`;
+}
+
+/** API origin without the /v1 prefix, or empty when calls stay same-origin. */
+export function getApiOrigin(): string {
+  const base = resolveApiBaseUrl();
+  return base.startsWith('http') ? base.replace(/\/v1$/, '') : '';
+}
+
+const api = axios.create({ baseURL: resolveApiBaseUrl() });
 
 api.interceptors.request.use((config) => {
   const key = getAdminKey();
-  if (key) {
+  if (key && !config.headers['x-admin-key']) {
     config.headers['x-admin-key'] = key;
   }
   return config;
@@ -36,6 +51,19 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+/** Returns true only when the server accepts this admin key. */
+export async function verifyAdminKey(key: string): Promise<boolean> {
+  try {
+    await api.get('/tenants', { headers: { 'x-admin-key': key } });
+    return true;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      return false;
+    }
+    throw error;
+  }
+}
 
 export type Tenant = {
   id: string;
