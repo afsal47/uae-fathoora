@@ -73,91 +73,65 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex">
-      <div className="hidden lg:flex lg:w-[46%] relative overflow-hidden bg-slate-900 border-r border-white/10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.35),transparent_55%)]" />
-        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-wide">UAE-FATHOORA</p>
-              <p className="text-xs text-slate-400">United Arab Emirates</p>
-            </div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6 sm:p-10">
+      <div className="w-full max-w-md">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
+            <ShieldCheck size={20} />
           </div>
-          <div className="max-w-md">
-            <h2 className="text-4xl font-semibold leading-tight tracking-tight">
-              Administration for UAE-FATHOORA tenants and submissions.
-            </h2>
-            <p className="mt-4 text-slate-400 text-sm leading-relaxed">
-              Manage tenants, integrations, and invoice status from one console.
-            </p>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">UAE-FATHOORA</p>
+            <p className="text-xs text-slate-500">Administration</p>
           </div>
-          <p className="text-xs text-slate-500">Authorized operators only</p>
         </div>
-      </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-slate-50 text-slate-900">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
-              <ShieldCheck size={20} />
-            </div>
+        <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Use the access key issued for this hub.
+        </p>
+
+        {checking ? (
+          <p className="mt-8 text-sm text-slate-400">Checking your session…</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            {error && (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
+                {error}
+              </p>
+            )}
             <div>
-              <p className="text-sm font-semibold text-slate-900">UAE-FATHOORA</p>
-              <p className="text-xs text-slate-500">Administration</p>
-            </div>
-          </div>
-
-          <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Use the access key issued for this hub.
-          </p>
-
-          {checking ? (
-            <p className="mt-8 text-sm text-slate-400">Checking your session…</p>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-              {error && (
-                <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
-                  {error}
-                </p>
-              )}
-              <div>
-                <label htmlFor="access-key" className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Access key
-                </label>
-                <div className="relative">
-                  <input
-                    id="access-key"
-                    type={showKey ? 'text' : 'password'}
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    autoComplete="current-password"
-                    autoFocus
-                    className="w-full border border-slate-300 bg-white rounded-lg pl-3 pr-11 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
-                    aria-label={showKey ? 'Hide access key' : 'Show access key'}
-                  >
-                    {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+              <label htmlFor="access-key" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Access key
+              </label>
+              <div className="relative">
+                <input
+                  id="access-key"
+                  type={showKey ? 'text' : 'password'}
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  autoComplete="current-password"
+                  autoFocus
+                  className="w-full border border-slate-300 bg-white rounded-lg pl-3 pr-11 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
+                  aria-label={showKey ? 'Hide access key' : 'Show access key'}
+                >
+                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-              >
-                {submitting ? 'Signing in…' : 'Sign in'}
-              </button>
-            </form>
-          )}
-        </div>
+            </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+            >
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

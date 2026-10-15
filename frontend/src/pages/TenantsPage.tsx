@@ -1,9 +1,39 @@
-import { useEffect, useState } from 'react';
-import { Pencil, Plus, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Pencil, Plus } from 'lucide-react';
+import Modal from '../components/Modal';
 import { tenantApi, type Tenant } from '../lib/api';
 
 const inputClass =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
+  'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
+
+/** Browsers treat email + password as a login and ignore autocomplete="off". */
+function unlockOnFocus(e: React.FocusEvent<HTMLInputElement>) {
+  e.currentTarget.readOnly = false;
+}
+
+function AutofillTrap() {
+  return (
+    <div className="absolute w-0 h-0 overflow-hidden" aria-hidden="true">
+      <input type="text" tabIndex={-1} autoComplete="username" />
+      <input type="password" tabIndex={-1} autoComplete="current-password" />
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
 
 function AspFields({
   tenant,
@@ -13,27 +43,23 @@ function AspFields({
   mode: 'create' | 'edit';
 }) {
   return (
-    <div className="md:col-span-2 mt-2 pt-4 border-t border-gray-100">
-      <h3 className="text-sm font-semibold text-gray-900 mb-1">ASP configuration</h3>
-      <p className="text-xs text-gray-500 mb-4">
+    <div className="mt-6 pt-6 border-t border-gray-100">
+      <h3 className="text-sm font-semibold text-gray-900">ASP configuration</h3>
+      <p className="text-xs text-gray-500 mt-1 mb-4">
         Access Point used for Peppol and FTA submission.
         {mode === 'edit' && ' Leave the API key and webhook token blank to keep the current values.'}
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ASP Provider *</label>
-          <select
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
+        <Field label="ASP Provider *">
+          <input
             name="aspProvider"
-            defaultValue={tenant?.aspProvider ?? 'FAKE'}
+            required
+            defaultValue={tenant?.aspProvider ?? ''}
+            placeholder="Provider name"
             className={inputClass}
-          >
-            <option value="FAKE">Sandbox</option>
-            <option value="CLEARTAX">ClearTax</option>
-            <option value="COMARCH">Comarch</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ASP Base URL</label>
+          />
+        </Field>
+        <Field label="ASP Base URL">
           <input
             name="aspBaseUrl"
             type="url"
@@ -41,13 +67,14 @@ function AspFields({
             placeholder="https://"
             className={inputClass}
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ASP API Key</label>
+        </Field>
+        <Field label="ASP API Key">
           <input
             name="aspApiKey"
             type="password"
-            autoComplete="off"
+            autoComplete="new-password"
+            readOnly
+            onFocus={unlockOnFocus}
             placeholder={
               mode === 'edit' && tenant?.aspApiKey
                 ? `Current: ${tenant.aspApiKey}`
@@ -55,13 +82,14 @@ function AspFields({
             }
             className={inputClass}
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ASP Webhook Token</label>
+        </Field>
+        <Field label="ASP Webhook Token">
           <input
             name="aspWebhookToken"
             type="password"
-            autoComplete="off"
+            autoComplete="new-password"
+            readOnly
+            onFocus={unlockOnFocus}
             placeholder={
               mode === 'edit' && tenant?.aspWebhookToken
                 ? `Current: ${tenant.aspWebhookToken}`
@@ -69,7 +97,7 @@ function AspFields({
             }
             className={inputClass}
           />
-        </div>
+        </Field>
       </div>
     </div>
   );
@@ -91,7 +119,12 @@ export default function TenantsPage() {
   const openCreate = () => {
     setEditingTenant(null);
     setError('');
-    setShowForm(!showForm);
+    setShowForm(true);
+  };
+
+  const closeCreate = () => {
+    setShowForm(false);
+    setError('');
   };
 
   const openEdit = (tenant: Tenant) => {
@@ -149,54 +182,63 @@ export default function TenantsPage() {
   if (loading) return <div className="text-gray-400 text-center py-16">Loading...</div>;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Tenants</h1>
         <button
+          type="button"
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          {showForm ? <X size={16} /> : <Plus size={16} />}
-          {showForm ? 'Cancel' : 'New Tenant'}
+          <Plus size={16} />
+          New Tenant
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Register New Tenant</h2>
-          {error && <p className="text-red-600 text-sm mb-3 bg-red-50 p-3 rounded-lg">{error}</p>}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
-              <input name="code" required className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
-              <input
-                name="name"
-                required
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">TRN</label>
-              <input name="trn" className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+      <Modal
+        open={showForm}
+        title="Register New Tenant"
+        description="Company details and the access point used for submission."
+        onClose={closeCreate}
+      >
+        <form onSubmit={handleCreate} autoComplete="off" className="relative">
+          <AutofillTrap />
+          {error && !editingTenant && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
+            <Field label="Code *">
+              <input name="code" required placeholder="TENANT_CODE" className={inputClass} />
+            </Field>
+            <Field label="Company Name *">
+              <input name="name" required placeholder="Registered company name" className={inputClass} />
+            </Field>
+            <Field label="TRN">
+              <input name="trn" placeholder="Tax registration number" className={inputClass} />
+            </Field>
+            <Field label="Email">
               <input
                 name="email"
-                type="email"
+                type="text"
+                inputMode="email"
+                autoComplete="off"
+                readOnly
+                onFocus={unlockOnFocus}
+                placeholder="name@company.com"
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-              <input name="city" className={inputClass} />
-            </div>
-            <AspFields mode="create" />
+            </Field>
+            <Field label="City">
+              <input name="city" placeholder="City" className={inputClass} />
+            </Field>
           </div>
-          <div className="mt-4 flex justify-end">
+          <AspFields mode="create" />
+          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closeCreate}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -205,69 +247,66 @@ export default function TenantsPage() {
             </button>
           </div>
         </form>
-      )}
+      </Modal>
 
-      {editingTenant && (
+      <Modal
+        open={editingTenant !== null}
+        title="Edit Tenant"
+        description="Update company details and access point credentials."
+        onClose={closeEdit}
+      >
+        {editingTenant && (
         <form
           key={editingTenant.id}
           onSubmit={handleUpdate}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
+          autoComplete="off"
+          className="relative"
         >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">Edit Tenant</h2>
-            <button
-              type="button"
-              onClick={closeEdit}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-            >
-              <X size={16} /> Cancel
-            </button>
-          </div>
-          {error && <p className="text-red-600 text-sm mb-3 bg-red-50 p-3 rounded-lg">{error}</p>}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+          <AutofillTrap />
+          {error && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
+            <Field label="Code">
               <input
                 value={editingTenant.code}
                 disabled
-                className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
+                className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2.5 text-sm text-gray-500 cursor-not-allowed"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+            </Field>
+            <Field label="Company Name *">
               <input
                 name="name"
                 required
                 defaultValue={editingTenant.name}
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">TRN</label>
+            </Field>
+            <Field label="TRN">
               <input
                 name="trn"
                 defaultValue={editingTenant.trn ?? ''}
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            </Field>
+            <Field label="Email">
               <input
                 name="email"
-                type="email"
+                type="text"
+                inputMode="email"
+                autoComplete="off"
+                readOnly
+                onFocus={unlockOnFocus}
                 defaultValue={editingTenant.email ?? ''}
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+            </Field>
+            <Field label="City">
               <input
                 name="city"
                 defaultValue={editingTenant.city ?? ''}
                 className={inputClass}
               />
-            </div>
-            <div className="flex items-end pb-2">
+            </Field>
+            <div className="flex items-end pb-2.5">
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                 <input
                   name="isActive"
@@ -278,9 +317,9 @@ export default function TenantsPage() {
                 Active
               </label>
             </div>
-            <AspFields mode="edit" tenant={editingTenant} />
           </div>
-          <div className="mt-4 flex justify-end gap-3">
+          <AspFields mode="edit" tenant={editingTenant} />
+          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end gap-3">
             <button
               type="button"
               onClick={closeEdit}
@@ -296,60 +335,65 @@ export default function TenantsPage() {
             </button>
           </div>
         </form>
-      )}
+        )}
+      </Modal>
 
       <div className="bg-white rounded-xl border border-gray-200">
         {tenants.length === 0 ? (
           <div className="p-12 text-center text-gray-400">No tenants yet. Create one to get started.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+            <table className="w-max min-w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                 <tr>
-                  <th className="px-5 py-3 text-left">Code</th>
-                  <th className="px-5 py-3 text-left">Name</th>
-                  <th className="px-5 py-3 text-left">TRN</th>
-                  <th className="px-5 py-3 text-left">ASP</th>
-                  <th className="px-5 py-3 text-left">ASP URL</th>
-                  <th className="px-5 py-3 text-center">Integrations</th>
-                  <th className="px-5 py-3 text-left">Status</th>
-                  <th className="px-5 py-3 text-left">Actions</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Code</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">TRN</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP URL</th>
+                  <th className="px-4 py-3 text-center font-semibold whitespace-nowrap">Integrations</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {tenants.map((t) => (
-                  <tr key={t.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 font-mono text-sm font-medium text-gray-900">{t.code}</td>
-                    <td className="px-5 py-3 text-gray-700">{t.name}</td>
-                    <td className="px-5 py-3 text-gray-500 font-mono text-xs">{t.trn ?? '—'}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                  <tr key={t.id} className="hover:bg-gray-50 align-middle">
+                    <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900 whitespace-nowrap">
+                      {t.code}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{t.name}</td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
+                      {t.trn ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                         {t.aspProvider}
                       </span>
                     </td>
                     <td
-                      className="px-5 py-3 text-gray-500 text-xs max-w-[180px] truncate"
+                      className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap max-w-[240px]"
                       title={t.aspBaseUrl ?? undefined}
                     >
-                      {t.aspBaseUrl ?? '—'}
+                      <span className="block truncate">{t.aspBaseUrl ?? '—'}</span>
                     </td>
-                    <td className="px-5 py-3 text-center text-gray-600">
+                    <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap tabular-nums">
                       {t.integrations?.length ?? 0}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                           t.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}
                       >
                         {t.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => openEdit(t)}
-                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
                         title="Edit tenant"
                       >
                         <Pencil size={14} /> Edit

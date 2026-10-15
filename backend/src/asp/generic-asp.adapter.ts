@@ -12,8 +12,7 @@ import { buildPintAeXml } from './pint-ae-xml.builder';
 const WEBHOOK_STATUSES = ['SUBMITTED', 'ACCEPTED', 'REJECTED', 'FAILED', 'CANCELLED'];
 
 /**
- * Posts Peppol XML to the single ASP URL stored on the tenant.
- * Used when aspProvider is not FAKE, MOCK, or CLEARTAX.
+ * Posts Peppol XML to the ASP URL stored on the tenant.
  */
 @Injectable()
 export class GenericAspAdapter implements AspProviderAdapter {

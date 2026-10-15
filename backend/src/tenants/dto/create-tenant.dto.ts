@@ -76,15 +76,14 @@ export class CreateTenantDto {
   @Matches(/^[A-Z]{2}$/)
   countryCode?: string;
 
-  @ApiPropertyOptional({
-    default: 'FAKE',
+  @ApiProperty({
     description:
-      'Access Point provider for this tenant. CLEARTAX uses the ClearTax API. Any other name posts XML to aspBaseUrl.',
+      'Access Point provider name for this tenant. Invoices are posted to aspBaseUrl under this name.',
   })
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(50)
-  aspProvider?: string;
+  aspProvider!: string;
 
   @ApiPropertyOptional({ description: 'ASP API base URL' })
   @IsOptional()
