@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Building2, Cable, FileText, LayoutDashboard, LogOut } from 'lucide-react';
-import { clearAdminKey, getApiOrigin } from '../lib/api';
+import { clearAdminKey } from '../lib/api';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,7 +19,7 @@ export default function Layout() {
     <div className="flex h-screen bg-gray-50">
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">E-Invoice Hub</h1>
+          <h1 className="text-xl font-bold text-gray-900">UAE-FATHOORA</h1>
           <p className="text-xs text-gray-500 mt-1">Admin Dashboard</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
@@ -41,21 +41,14 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-200 space-y-2">
-          <a
-            href={`${getApiOrigin() || 'http://localhost:3004'}/docs`}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-xs text-gray-400 hover:text-blue-600 transition-colors"
-          >
-            Swagger API Docs
-          </a>
+        <div className="p-4 border-t border-gray-200">
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-600 transition-colors"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-700 transition-colors"
           >
-            <LogOut size={14} /> Sign out
+            <LogOut size={18} />
+            Sign out
           </button>
         </div>
       </aside>

@@ -118,7 +118,7 @@ export class QueueService implements OnModuleDestroy {
     }
 
     await this.queue?.add(INVOICE_SUBMISSION_JOB, payload, {
-      jobId: `invoice:${invoiceId}`,
+      jobId: `invoice-${invoiceId}`,
     });
   }
 
@@ -137,7 +137,7 @@ export class QueueService implements OnModuleDestroy {
     }
 
     await this.webhookQueue?.add(WEBHOOK_DELIVERY_JOB, payload, {
-      jobId: `webhook:${deliveryId}`,
+      jobId: `webhook-${deliveryId}`,
     });
   }
 

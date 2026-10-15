@@ -8,13 +8,13 @@ import {
 } from 'class-validator';
 
 export class UpdateTenantDto {
-  @ApiPropertyOptional({ example: 'City Marine Insurance LLC' })
+  @ApiPropertyOptional({ description: 'Registered company name' })
   @IsOptional()
   @IsString()
   @MaxLength(200)
   name?: string;
 
-  @ApiPropertyOptional({ example: '100123456700003' })
+  @ApiPropertyOptional({ description: 'Tax Registration Number' })
   @IsOptional()
   @IsString()
   @MaxLength(50)

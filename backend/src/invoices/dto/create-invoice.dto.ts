@@ -529,12 +529,12 @@ class TransactionFlagsDto {
 }
 
 export class CreateInvoiceDto {
-  @ApiProperty({ example: 'CITY_MARINE' })
+  @ApiProperty({ description: 'Tenant code' })
   @IsString()
   @IsNotEmpty()
   tenantCode!: string;
 
-  @ApiProperty({ example: 'IBMS_BROKING' })
+  @ApiProperty({ description: 'Source system code' })
   @IsString()
   @IsNotEmpty()
   sourceSystem!: string;

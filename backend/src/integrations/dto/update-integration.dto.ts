@@ -7,7 +7,7 @@ import {
 } from 'class-validator';
 
 export class UpdateIntegrationDto {
-  @ApiPropertyOptional({ example: 'IBMS Broking System' })
+  @ApiPropertyOptional({ description: 'Integration display name' })
   @IsOptional()
   @IsString()
   @MaxLength(200)

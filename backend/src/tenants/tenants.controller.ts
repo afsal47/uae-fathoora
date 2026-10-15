@@ -40,7 +40,7 @@ export class TenantsController {
   }
 
   @Get('code/:code')
-  @ApiOperation({ summary: 'Get tenant by code (e.g. CITY_MARINE)' })
+  @ApiOperation({ summary: 'Get tenant by code' })
   findByCode(@Param('code') code: string) {
     return this.tenantsService.findByCode(code);
   }

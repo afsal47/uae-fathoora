@@ -7,13 +7,13 @@ import {
 } from 'class-validator';
 
 export class CreateIntegrationDto {
-  @ApiProperty({ example: 'IBMS_BROKING', description: 'Unique code within the tenant' })
+  @ApiProperty({ description: 'Unique code within the tenant' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   code!: string;
 
-  @ApiProperty({ example: 'IBMS Broking System' })
+  @ApiProperty({ description: 'Integration display name' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)

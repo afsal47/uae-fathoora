@@ -201,7 +201,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-amber-50 border border-amber-100 rounded-lg p-3">
             <Field label="Reason Code" value={creditReasonCode || '—'} />
             <Field
-              label="Against Credit Note ID (IBMS)"
+              label="Against credit note ID"
               value={againstDCNoteId || '—'}
             />
             <Field
@@ -468,7 +468,7 @@ export default function InvoicesPage() {
 
       {invoices.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
-          No invoices yet. Create one via the API (POST /v1/invoices).
+          No invoices yet.
         </div>
       ) : (
         <div className="space-y-3">
@@ -476,22 +476,21 @@ export default function InvoicesPage() {
             <div key={inv.id} className="bg-white rounded-xl border border-gray-200">
               <button
                 onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
-                className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 rounded-xl transition-colors"
+                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 rounded-xl transition-colors"
               >
-                <div className="flex items-center gap-6 text-sm">
-                  <span className="font-medium text-gray-900 w-32">{inv.invoiceNumber}</span>
-                  <span className="text-gray-500 w-40 truncate">{inv.sellerName}</span>
-                  <span className="text-gray-400">→</span>
-                  <span className="text-gray-500 w-40 truncate">{inv.buyerName}</span>
-                  <span className="font-medium text-gray-900 w-28 text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
+                  <span className="font-medium text-gray-900 truncate">{inv.invoiceNumber}</span>
+                  <span className="text-gray-500 truncate">{inv.sellerName}</span>
+                  <span className="text-gray-500 truncate">{inv.buyerName}</span>
+                  <span className="font-medium text-gray-900 whitespace-nowrap">
                     {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
                   </span>
                   <StatusBadge status={inv.status} />
                 </div>
                 {expandedId === inv.id ? (
-                  <ChevronUp size={16} className="text-gray-400" />
+                  <ChevronUp size={16} className="text-gray-400 shrink-0" />
                 ) : (
-                  <ChevronDown size={16} className="text-gray-400" />
+                  <ChevronDown size={16} className="text-gray-400 shrink-0" />
                 )}
               </button>
 

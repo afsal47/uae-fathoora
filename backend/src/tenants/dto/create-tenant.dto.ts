@@ -9,37 +9,37 @@ import {
 } from 'class-validator';
 
 export class CreateTenantDto {
-  @ApiProperty({ example: 'CITY_MARINE', description: 'Unique tenant code' })
+  @ApiProperty({ description: 'Unique tenant code' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   code!: string;
 
-  @ApiProperty({ example: 'City Marine Insurance LLC' })
+  @ApiProperty({ description: 'Registered company name' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
   name!: string;
 
-  @ApiPropertyOptional({ example: '100123456700003', description: 'Tax Registration Number' })
+  @ApiPropertyOptional({ description: 'Tax Registration Number' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   trn?: string;
 
-  @ApiPropertyOptional({ example: 'accounts@citymarine.ae' })
+  @ApiPropertyOptional({ description: 'Contact email' })
   @IsOptional()
   @IsString()
   @MaxLength(200)
   email?: string;
 
-  @ApiPropertyOptional({ example: '+971-4-1234567' })
+  @ApiPropertyOptional({ description: 'Contact phone' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   phone?: string;
 
-  @ApiPropertyOptional({ example: 'Office 101, Business Bay Tower' })
+  @ApiPropertyOptional({ description: 'Address line 1' })
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -51,19 +51,19 @@ export class CreateTenantDto {
   @MaxLength(200)
   addressLine2?: string;
 
-  @ApiPropertyOptional({ example: 'Dubai' })
+  @ApiPropertyOptional({ description: 'City' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   city?: string;
 
-  @ApiPropertyOptional({ example: 'Dubai' })
+  @ApiPropertyOptional({ description: 'State or emirate' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   state?: string;
 
-  @ApiPropertyOptional({ example: '12345' })
+  @ApiPropertyOptional({ description: 'Postal code' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
@@ -79,7 +79,7 @@ export class CreateTenantDto {
   @ApiPropertyOptional({
     default: 'FAKE',
     description:
-      'Selected ASP for this tenant only. FAKE/MOCK stay local. CLEARTAX uses the ClearTax API. Any other name posts XML to aspBaseUrl.',
+      'Access Point provider for this tenant. CLEARTAX uses the ClearTax API. Any other name posts XML to aspBaseUrl.',
   })
   @IsOptional()
   @IsString()

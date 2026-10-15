@@ -123,15 +123,15 @@ export default function IntegrationsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
-              <input name="code" required placeholder="IBMS_BROKING" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+              <input name="code" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-              <input name="name" required placeholder="IBMS Broking System" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+              <input name="name" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
-              <input name="webhookUrl" placeholder="https://ibms.company.ae/api/webhooks/einvoice" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+              <input name="webhookUrl" type="url" placeholder="https://" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
               <p className="text-xs text-gray-400 mt-1">Hub will POST invoice status updates to this URL</p>
             </div>
           </div>

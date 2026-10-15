@@ -16,8 +16,8 @@ function AspFields({
     <div className="md:col-span-2 mt-2 pt-4 border-t border-gray-100">
       <h3 className="text-sm font-semibold text-gray-900 mb-1">ASP configuration</h3>
       <p className="text-xs text-gray-500 mb-4">
-        Access Point provider for Peppol / FTA submission. Use FAKE for local testing.
-        {mode === 'edit' && ' Leave API key / webhook token blank to keep current values.'}
+        Access Point used for Peppol and FTA submission.
+        {mode === 'edit' && ' Leave the API key and webhook token blank to keep the current values.'}
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -27,7 +27,7 @@ function AspFields({
             defaultValue={tenant?.aspProvider ?? 'FAKE'}
             className={inputClass}
           >
-            <option value="FAKE">FAKE (Testing)</option>
+            <option value="FAKE">Sandbox</option>
             <option value="CLEARTAX">ClearTax</option>
             <option value="COMARCH">Comarch</option>
           </select>
@@ -38,7 +38,7 @@ function AspFields({
             name="aspBaseUrl"
             type="url"
             defaultValue={tenant?.aspBaseUrl ?? ''}
-            placeholder="https://api.cleartax.com or http://localhost:3100"
+            placeholder="https://"
             className={inputClass}
           />
         </div>
@@ -51,7 +51,7 @@ function AspFields({
             placeholder={
               mode === 'edit' && tenant?.aspApiKey
                 ? `Current: ${tenant.aspApiKey}`
-                : 'ClearTax / ASP API key'
+                : 'ASP API key'
             }
             className={inputClass}
           />
@@ -65,7 +65,7 @@ function AspFields({
             placeholder={
               mode === 'edit' && tenant?.aspWebhookToken
                 ? `Current: ${tenant.aspWebhookToken}`
-                : 'Token ASP sends on inbound webhooks'
+                : 'Webhook token'
             }
             className={inputClass}
           />
@@ -168,33 +168,31 @@ export default function TenantsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
-              <input name="code" required placeholder="CITY_MARINE" className={inputClass} />
+              <input name="code" required className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
               <input
                 name="name"
                 required
-                placeholder="City Marine Insurance LLC"
                 className={inputClass}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">TRN</label>
-              <input name="trn" placeholder="100123456700003" className={inputClass} />
+              <input name="trn" className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 name="email"
                 type="email"
-                placeholder="accounts@company.ae"
                 className={inputClass}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-              <input name="city" placeholder="Dubai" className={inputClass} />
+              <input name="city" className={inputClass} />
             </div>
             <AspFields mode="create" />
           </div>
@@ -249,7 +247,6 @@ export default function TenantsPage() {
               <input
                 name="trn"
                 defaultValue={editingTenant.trn ?? ''}
-                placeholder="100123456700003"
                 className={inputClass}
               />
             </div>
@@ -259,7 +256,6 @@ export default function TenantsPage() {
                 name="email"
                 type="email"
                 defaultValue={editingTenant.email ?? ''}
-                placeholder="accounts@company.ae"
                 className={inputClass}
               />
             </div>
@@ -268,7 +264,6 @@ export default function TenantsPage() {
               <input
                 name="city"
                 defaultValue={editingTenant.city ?? ''}
-                placeholder="Dubai"
                 className={inputClass}
               />
             </div>
