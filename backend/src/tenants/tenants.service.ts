@@ -31,7 +31,7 @@ export class TenantsService {
           state: dto.state,
           postalCode: dto.postalCode,
           countryCode: dto.countryCode ?? 'AE',
-          aspProvider: dto.aspProvider?.toUpperCase() ?? 'FAKE',
+          aspProvider: dto.aspProvider.trim().toUpperCase(),
           aspBaseUrl: dto.aspBaseUrl,
           aspApiKey: this.secrets.encrypt(dto.aspApiKey) ?? null,
           aspWebhookToken: this.secrets.encrypt(dto.aspWebhookToken) ?? null,

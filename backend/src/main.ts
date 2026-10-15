@@ -32,7 +32,7 @@ async function bootstrap() {
   app.useGlobalPipes(new AcceptPayloadPipe());
 
   const config = new DocumentBuilder()
-    .setTitle('E-Invoice Hub API')
+    .setTitle('UAE-FATHOORA API')
     .setDescription('Shared multi-tenant e-invoicing platform API')
     .setVersion('1.0')
     .addApiKey(

@@ -28,16 +28,6 @@ type AuthedRequest = {
 @UseGuards(ApiKeyGuard)
 @ApiSecurity('api-key')
 @ApiHeader({ name: 'x-api-key', required: true, description: 'Integration API key' })
-@ApiHeader({
-  name: 'x-signature',
-  required: false,
-  description: 'HMAC-SHA256 signature (optional while HMAC_REQUIRED=false)',
-})
-@ApiHeader({
-  name: 'x-timestamp',
-  required: false,
-  description: 'Unix timestamp in ms (optional while HMAC_REQUIRED=false)',
-})
 export class InvoicesController {
   constructor(
     private readonly invoicesService: InvoicesService,

@@ -7,42 +7,64 @@ function Field({ label, value }: { label: string; value?: string | number | null
   if (value === undefined || value === null || value === '') return null;
   const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
   return (
-    <div>
-      <p className="text-gray-400 text-xs">{label}</p>
-      <p className="text-gray-900 break-words">{display}</p>
+    <div className="min-w-0">
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="mt-1 text-sm leading-snug text-gray-900 break-words">{display}</p>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="mt-4">
-      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{title}</p>
+    <section className="mt-6 first:mt-5">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</h3>
       {children}
+    </section>
+  );
+}
+
+function visibleEntries(data?: Record<string, unknown> | null) {
+  if (!data) return [];
+  return Object.entries(data).filter(([, value]) => value !== undefined && value !== null && value !== '');
+}
+
+function ObjectGrid({
+  data,
+  columns = 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+}: {
+  data?: Record<string, unknown> | null;
+  columns?: string;
+}) {
+  const entries = visibleEntries(data);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className={`grid items-start gap-x-8 gap-y-4 ${columns}`}>
+      {entries.map(([key, value]) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          return (
+            <div key={key} className="col-span-full space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{labelize(key)}</p>
+              <ObjectGrid data={value as Record<string, unknown>} columns={columns} />
+            </div>
+          );
+        }
+        if (Array.isArray(value)) return null;
+        return <Field key={key} label={labelize(key)} value={value as string | number | boolean} />;
+      })}
     </div>
   );
 }
 
-function ObjectGrid({ data }: { data?: Record<string, unknown> | null }) {
-  if (!data) return null;
-  const entries = Object.entries(data).filter(([, v]) => v !== undefined && v !== null && v !== '');
-  if (entries.length === 0) return null;
-
+function RecordList({ items }: { items?: Record<string, unknown>[] | null }) {
+  if (!items || items.length === 0) return null;
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-      {entries.map(([key, value]) => {
-        if (typeof value === 'object') {
-          return (
-            <div key={key} className="col-span-2 md:col-span-4">
-              <p className="text-gray-400 text-xs mb-1">{labelize(key)}</p>
-              <pre className="bg-gray-50 border border-gray-100 rounded-lg p-2 text-xs text-gray-700 overflow-x-auto">
-                {JSON.stringify(value, null, 2)}
-              </pre>
-            </div>
-          );
-        }
-        return <Field key={key} label={labelize(key)} value={value as string | number | boolean} />;
-      })}
+    <div className="space-y-2">
+      {items.map((item, index) => (
+        <div key={index} className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+          <ObjectGrid data={item} columns="grid-cols-2 sm:grid-cols-3" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -83,11 +105,14 @@ function PartyBlock({
   countryCode?: string | null;
   extras?: InvoiceSourcePayload['seller'] | null;
 }) {
+  const registration = visibleEntries(extras?.legalRegistration);
+  const contact = visibleEntries(extras?.contact);
+
   return (
-    <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-2">
-      <p className="text-xs font-semibold text-gray-500 uppercase">{title}</p>
-      <p className="font-medium text-gray-900">{name}</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+    <div className="h-full rounded-lg border border-gray-100 bg-gray-50 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</p>
+      <p className="mt-1 text-sm font-semibold text-gray-900">{name}</p>
+      <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
         <Field label="TRN" value={trn} />
         <Field
           label="Address"
@@ -104,16 +129,16 @@ function PartyBlock({
         <Field label="Endpoint ID" value={extras?.endpointId} />
         <Field label="Endpoint Scheme" value={extras?.endpointScheme} />
       </div>
-      {extras?.legalRegistration && (
-        <div>
-          <p className="text-gray-400 text-xs mb-1">Legal Registration</p>
-          <ObjectGrid data={extras.legalRegistration} />
+      {registration.length > 0 && (
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Legal Registration</p>
+          <ObjectGrid data={extras?.legalRegistration} columns="grid-cols-2" />
         </div>
       )}
-      {extras?.contact && (
-        <div>
-          <p className="text-gray-400 text-xs mb-1">Contact</p>
-          <ObjectGrid data={extras.contact} />
+      {contact.length > 0 && (
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Contact</p>
+          <ObjectGrid data={extras?.contact} columns="grid-cols-2" />
         </div>
       )}
     </div>
@@ -147,9 +172,9 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
   const precedingHubInvoiceId = src?.precedingInvoiceRef?.id;
 
   return (
-    <div className="px-5 pb-5 border-t border-gray-100">
+    <div className="border-t border-gray-100 px-5 pb-6">
       <Section title="Document">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 md:grid-cols-4">
           <Field label="Document Type" value={formatDocumentType(inv.documentType)} />
           <Field label="Hub Invoice Number" value={inv.invoiceNumber} />
           <Field
@@ -157,7 +182,6 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
             value={inv.sourceSystemDCNoteId || '—'}
           />
           <Field label="Source Document ID" value={inv.sourceDocumentId} />
-          <Field label="Idempotency Key" value={inv.idempotencyKey} />
           <Field label="Issue Date" value={new Date(inv.issueDate).toLocaleDateString()} />
           <Field label="Tax Point Date" value={src?.taxPointDate} />
           <Field label="Due Date" value={src?.dueDate} />
@@ -198,10 +222,10 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
         againstDCNoteId ||
         precedingHubInvoiceId) && (
         <Section title="Credit / Debit Note">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-amber-50 border border-amber-100 rounded-lg p-3">
+          <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 rounded-lg border border-amber-100 bg-amber-50 p-4 md:grid-cols-4">
             <Field label="Reason Code" value={creditReasonCode || '—'} />
             <Field
-              label="Against Credit Note ID (IBMS)"
+              label="Against credit note ID"
               value={againstDCNoteId || '—'}
             />
             <Field
@@ -217,7 +241,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
       )}
 
       <Section title="Parties">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
           <PartyBlock
             title="Seller"
             name={inv.sellerName}
@@ -249,16 +273,16 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
       {(src?.paymentMeans || src?.paymentTerms) && (
         <Section title="Payment">
-          <div className="space-y-3">
+          <div className="space-y-5">
             {src.paymentMeans && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Payment Means</p>
-                <ObjectGrid data={src.paymentMeans} />
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Payment Means</p>
+                <ObjectGrid data={src.paymentMeans} columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
               </div>
             )}
             {src.paymentTerms && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Payment Terms</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Payment Terms</p>
                 <ObjectGrid data={src.paymentTerms} />
               </div>
             )}
@@ -268,34 +292,34 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
       {(src?.delivery || src?.invoicePeriod || src?.orderReference || src?.precedingInvoiceRef || src?.references) && (
         <Section title="References & Delivery">
-          <div className="space-y-3">
+          <div className="space-y-5">
             {src.delivery && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Delivery</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Delivery</p>
                 <ObjectGrid data={src.delivery} />
               </div>
             )}
             {src.invoicePeriod && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Invoice Period</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Invoice Period</p>
                 <ObjectGrid data={src.invoicePeriod} />
               </div>
             )}
             {src.orderReference && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Order Reference</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Order Reference</p>
                 <ObjectGrid data={src.orderReference} />
               </div>
             )}
             {src.precedingInvoiceRef && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Preceding Invoice</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Preceding Invoice</p>
                 <ObjectGrid data={src.precedingInvoiceRef} />
               </div>
             )}
             {src.references && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">References</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">References</p>
                 <ObjectGrid data={src.references} />
               </div>
             )}
@@ -305,19 +329,19 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
       {(src?.transactionFlags || (src?.allowanceCharges && src.allowanceCharges.length > 0)) && (
         <Section title="Transaction Flags & Allowances">
-          <div className="space-y-3">
+          <div className="space-y-5">
             {src.transactionFlags && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Transaction Flags</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Transaction Flags</p>
                 <ObjectGrid data={src.transactionFlags} />
               </div>
             )}
             {src.allowanceCharges && src.allowanceCharges.length > 0 && (
               <div>
-                <p className="text-gray-400 text-xs mb-1">Document Allowances / Charges</p>
-                <pre className="bg-gray-50 border border-gray-100 rounded-lg p-2 text-xs text-gray-700 overflow-x-auto">
-                  {JSON.stringify(src.allowanceCharges, null, 2)}
-                </pre>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                  Document Allowances / Charges
+                </p>
+                <RecordList items={src.allowanceCharges} />
               </div>
             )}
           </div>
@@ -326,7 +350,8 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
       {inv.lines.length > 0 && (
         <Section title="Line Items">
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>
@@ -369,10 +394,17 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
                             <div>Order line: {extra.orderLineReferenceId}</div>
                           )}
                           {extra.invoicePeriod && (
-                            <div>Period: {JSON.stringify(extra.invoicePeriod)}</div>
+                            <div>
+                              Period:{' '}
+                              {visibleEntries(extra.invoicePeriod)
+                                .map(([key, value]) => `${labelize(key)} ${String(value)}`)
+                                .join(', ')}
+                            </div>
                           )}
                           {extra.allowanceCharges && extra.allowanceCharges.length > 0 && (
-                            <div>Line A/C: {JSON.stringify(extra.allowanceCharges)}</div>
+                            <div className="mt-1">
+                              <RecordList items={extra.allowanceCharges} />
+                            </div>
                           )}
                         </div>
                       )}
@@ -421,14 +453,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
               </tr>
             </tfoot>
           </table>
-        </Section>
-      )}
-
-      {src && (
-        <Section title="Full Source Payload">
-          <pre className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-700 overflow-x-auto max-h-80">
-            {JSON.stringify(src, null, 2)}
-          </pre>
+          </div>
         </Section>
       )}
 
@@ -468,7 +493,7 @@ export default function InvoicesPage() {
 
       {invoices.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
-          No invoices yet. Create one via the API (POST /v1/invoices).
+          No invoices yet.
         </div>
       ) : (
         <div className="space-y-3">
@@ -476,22 +501,21 @@ export default function InvoicesPage() {
             <div key={inv.id} className="bg-white rounded-xl border border-gray-200">
               <button
                 onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
-                className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 rounded-xl transition-colors"
+                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 rounded-xl transition-colors"
               >
-                <div className="flex items-center gap-6 text-sm">
-                  <span className="font-medium text-gray-900 w-32">{inv.invoiceNumber}</span>
-                  <span className="text-gray-500 w-40 truncate">{inv.sellerName}</span>
-                  <span className="text-gray-400">→</span>
-                  <span className="text-gray-500 w-40 truncate">{inv.buyerName}</span>
-                  <span className="font-medium text-gray-900 w-28 text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
+                  <span className="font-medium text-gray-900 truncate">{inv.invoiceNumber}</span>
+                  <span className="text-gray-500 truncate">{inv.sellerName}</span>
+                  <span className="text-gray-500 truncate">{inv.buyerName}</span>
+                  <span className="font-medium text-gray-900 whitespace-nowrap">
                     {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
                   </span>
                   <StatusBadge status={inv.status} />
                 </div>
                 {expandedId === inv.id ? (
-                  <ChevronUp size={16} className="text-gray-400" />
+                  <ChevronUp size={16} className="text-gray-400 shrink-0" />
                 ) : (
-                  <ChevronDown size={16} className="text-gray-400" />
+                  <ChevronDown size={16} className="text-gray-400 shrink-0" />
                 )}
               </button>
 
