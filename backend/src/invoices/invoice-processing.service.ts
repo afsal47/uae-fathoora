@@ -9,7 +9,7 @@ import {
 import { Invoice } from '@prisma/client';
 import { Worker } from 'bullmq';
 import { AspProviderResolverService } from '../asp/asp-provider-resolver.service';
-import { ParsedWebhookPayload } from '../asp/asp.types';
+import { AspSubmissionError, ParsedWebhookPayload } from '../asp/asp.types';
 import { SecretsCryptoService } from '../auth/secrets-crypto.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -189,18 +189,23 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown ASP submission failure.';
+      const aspResponse =
+        error instanceof AspSubmissionError && error.responseBody
+          ? JSON.stringify(error.responseBody)
+          : null;
 
       await this.prisma.invoice.update({
         where: { id: invoice.id },
         data: {
           status: INVOICE_STATUS.FAILED,
-          lastSubmissionError: message,
+          lastSubmissionError: message.slice(0, 2000),
+          aspResponse,
           events: {
             create: {
               type: EVENT_TYPE.SUBMISSION_FAILED,
               fromStatus: INVOICE_STATUS.SUBMITTING,
               toStatus: INVOICE_STATUS.FAILED,
-              message,
+              message: message.slice(0, 1000),
             },
           },
         },
@@ -234,6 +239,22 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         },
       },
     });
+
+    if (this.queueService.mode === 'inline') {
+      try {
+        return await this.processSubmission(invoiceId);
+      } catch {
+        return this.prisma.invoice.findUnique({
+          where: { id: invoiceId },
+          include: {
+            lines: true,
+            events: {
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        });
+      }
+    }
 
     await this.queueService.enqueueInvoiceSubmission(invoiceId);
 

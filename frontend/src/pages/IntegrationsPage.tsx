@@ -85,13 +85,13 @@ export default function IntegrationsPage() {
           className="inline-flex shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus size={16} />
-          New Integration
+          New source system
         </button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
         <label htmlFor="tenant-select" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Select Tenant
+          Tenant code
         </label>
         <div className="relative w-full max-w-2xl">
           <select
@@ -117,8 +117,8 @@ export default function IntegrationsPage() {
 
       <Modal
         open={showForm}
-        title={`New Integration${selected ? ` for ${selected.code}` : ''}`}
-        description="Create an API client for the selected tenant."
+        title={`New source system${selected ? ` for tenant code ${selected.code}` : ''}`}
+        description="Source system is the invoice field sourceSystem. Tenant code is the company selected above."
         onClose={() => { setShowForm(false); setError(''); }}
         size="md"
       >
@@ -126,12 +126,13 @@ export default function IntegrationsPage() {
           {error && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
           <div className="grid grid-cols-1 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Code *</label>
-              <input name="code" required placeholder="INTEGRATION_CODE" className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Source system *</label>
+              <input name="code" required placeholder="SOURCE_SYSTEM" className={inputClass} />
+              <p className="text-xs text-gray-400 mt-1">Invoice field sourceSystem must equal this value.</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Name *</label>
-              <input name="name" required placeholder="Integration name" className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Display name *</label>
+              <input name="name" required placeholder="Name shown in this list" className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Webhook URL</label>
@@ -217,14 +218,14 @@ export default function IntegrationsPage() {
 
       <div className="bg-white rounded-xl border border-gray-200">
         {integrations.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">No integrations for this tenant yet.</div>
+          <div className="p-12 text-center text-gray-400">No source systems for this tenant code yet.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-max min-w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <thead className="bg-gray-50 text-gray-500 text-xs tracking-wide">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Code</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Source system</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Display name</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">API Key</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Webhook</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Status</th>

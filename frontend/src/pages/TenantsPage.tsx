@@ -205,7 +205,7 @@ export default function TenantsPage() {
           <AutofillTrap />
           {error && !editingTenant && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
-            <Field label="Code *">
+            <Field label="Tenant code *">
               <input name="code" required placeholder="TENANT_CODE" className={inputClass} />
             </Field>
             <Field label="Company Name *">
@@ -265,7 +265,7 @@ export default function TenantsPage() {
           <AutofillTrap />
           {error && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
-            <Field label="Code">
+            <Field label="Tenant code">
               <input
                 value={editingTenant.code}
                 disabled
@@ -344,10 +344,10 @@ export default function TenantsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-max min-w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <thead className="bg-gray-50 text-gray-500 text-xs tracking-wide">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Code</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Tenant code</th>
+                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Company name</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">TRN</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP</th>
                   <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP URL</th>

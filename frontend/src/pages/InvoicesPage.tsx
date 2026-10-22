@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import axios from 'axios';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
-import { invoiceApi, type Invoice, type InvoiceSourcePayload } from '../lib/api';
+import { invoiceApi, tenantApi, type Invoice, type InvoiceSourcePayload, type Tenant } from '../lib/api';
 
 function Field({ label, value }: { label: string; value?: string | number | null | boolean }) {
   if (value === undefined || value === null || value === '') return null;
@@ -163,6 +164,14 @@ function formatDocumentType(documentType: string) {
   return DOCUMENT_TYPE_LABELS[documentType] ?? documentType;
 }
 
+function formatAspResponse(value: string) {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
 function InvoiceDetails({ inv }: { inv: Invoice }) {
   const src = inv.sourcePayload ?? null;
   const lineExtras = src?.lines ?? [];
@@ -209,9 +218,19 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
             </div>
           )}
           {inv.lastSubmissionError && (
-            <div className="col-span-2">
-              <p className="text-gray-400 text-xs">Last Error</p>
-              <p className="text-red-600">{inv.lastSubmissionError}</p>
+            <div className="col-span-2 md:col-span-4">
+              <p className="text-gray-400 text-xs">ASP error</p>
+              <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
+                {inv.lastSubmissionError}
+              </pre>
+            </div>
+          )}
+          {inv.status === 'FAILED' && inv.aspResponse && (
+            <div className="col-span-2 md:col-span-4">
+              <p className="text-gray-400 text-xs">ASP response</p>
+              <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-red-50 p-3 font-mono text-xs text-red-800">
+                {formatAspResponse(inv.aspResponse)}
+              </pre>
             </div>
           )}
         </div>
@@ -478,32 +497,113 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantId, setTenantId] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [requeueId, setRequeueId] = useState<number | null>(null);
+  const [requeueError, setRequeueError] = useState('');
+
+  const load = () =>
+    Promise.all([invoiceApi.list(), tenantApi.list()]).then(([invoiceRows, tenantRows]) => {
+      setInvoices(invoiceRows);
+      setTenants(tenantRows);
+    });
 
   useEffect(() => {
-    invoiceApi.list().then(setInvoices).catch(() => {}).finally(() => setLoading(false));
+    load()
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
+
+  const requeue = async (id: number) => {
+    setRequeueError('');
+    setRequeueId(id);
+    try {
+      await invoiceApi.requeue(id);
+      setExpandedId(id);
+      await load();
+    } catch (err) {
+      let message = 'Requeue failed.';
+      if (axios.isAxiosError(err)) {
+        const data = err.response?.data as { message?: string | string[] } | undefined;
+        if (Array.isArray(data?.message)) message = data.message.join(', ');
+        else if (typeof data?.message === 'string') message = data.message;
+        else message = err.message;
+      }
+      setRequeueError(message);
+    } finally {
+      setRequeueId(null);
+    }
+  };
+
+  const tenantById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+  const visible = tenantId ? invoices.filter((inv) => inv.tenantId === tenantId) : invoices;
 
   if (loading) return <div className="text-gray-400 text-center py-16">Loading...</div>;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Invoices</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
 
-      {invoices.length === 0 ? (
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <label htmlFor="invoice-tenant" className="block text-sm font-medium text-gray-700 mb-1.5">
+          Tenant code
+        </label>
+        <div className="relative w-full max-w-2xl">
+          <select
+            id="invoice-tenant"
+            value={tenantId}
+            onChange={(e) => {
+              setTenantId(e.target.value);
+              setExpandedId(null);
+            }}
+            className="w-full appearance-none border border-gray-300 rounded-lg pl-3 pr-10 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          >
+            <option value="">All tenants</option>
+            {tenants.map((tenant) => (
+              <option key={tenant.id} value={tenant.id}>
+                {tenant.code} — {tenant.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden
+          />
+        </div>
+      </div>
+
+      {requeueError && (
+        <p className="text-sm text-red-600">{requeueError}</p>
+      )}
+
+      {visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
-          No invoices yet.
+          {tenantId ? 'No invoices for this tenant code.' : 'No invoices yet.'}
         </div>
       ) : (
         <div className="space-y-3">
-          {invoices.map((inv) => (
+          {visible.map((inv) => (
             <div key={inv.id} className="bg-white rounded-xl border border-gray-200">
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
-                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 rounded-xl transition-colors"
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setExpandedId(expandedId === inv.id ? null : inv.id);
+                  }
+                }}
+                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
+                  <span className="font-mono text-xs text-gray-500 whitespace-nowrap">
+                    {tenantById.get(inv.tenantId)?.code ?? '—'}
+                  </span>
                   <span className="font-medium text-gray-900 truncate">{inv.invoiceNumber}</span>
                   <span className="text-gray-500 truncate">{inv.sellerName}</span>
                   <span className="text-gray-500 truncate">{inv.buyerName}</span>
@@ -512,12 +612,31 @@ export default function InvoicesPage() {
                   </span>
                   <StatusBadge status={inv.status} />
                 </div>
+                {inv.status === 'FAILED' && (
+                  <button
+                    type="button"
+                    disabled={requeueId === inv.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void requeue(inv.id);
+                    }}
+                    className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {requeueId === inv.id ? 'Requeueing…' : 'Requeue'}
+                  </button>
+                )}
                 {expandedId === inv.id ? (
                   <ChevronUp size={16} className="text-gray-400 shrink-0" />
                 ) : (
                   <ChevronDown size={16} className="text-gray-400 shrink-0" />
                 )}
-              </button>
+              </div>
+
+              {inv.lastSubmissionError && expandedId !== inv.id && (
+                <pre className="border-t border-red-100 bg-red-50 px-5 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
+                  {inv.lastSubmissionError}
+                </pre>
+              )}
 
               {expandedId === inv.id && <InvoiceDetails inv={inv} />}
             </div>

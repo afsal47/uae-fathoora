@@ -19,7 +19,12 @@ describe('InvoiceProcessingService', () => {
         }),
       },
     };
-    const queueService = {
+    const queueService: {
+      mode: 'inline' | 'bullmq';
+      getConnection: jest.Mock;
+      setInlineProcessor: jest.Mock;
+      enqueueInvoiceSubmission: jest.Mock;
+    } = {
       mode: 'inline',
       getConnection: jest.fn(),
       setInlineProcessor: jest.fn(),
@@ -100,6 +105,7 @@ describe('InvoiceProcessingService', () => {
 
   it('requeues an invoice and enqueues it again', async () => {
     const { service, prisma, queueService } = createService();
+    queueService.mode = 'bullmq';
     prisma.invoice.findUnique
       .mockResolvedValueOnce({
         id: 'invoice-1',
@@ -117,6 +123,29 @@ describe('InvoiceProcessingService', () => {
 
     expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
     expect(invoice!.status).toBe('QUEUED');
+  });
+
+  it('submits to the ASP before returning a requeued invoice', async () => {
+    const { service, prisma, queueService } = createService();
+    prisma.invoice.findUnique.mockResolvedValueOnce({
+      id: 'invoice-1',
+      status: 'FAILED',
+    });
+    prisma.invoice.update.mockResolvedValue({});
+    const submitted = {
+      id: 'invoice-1',
+      status: 'FAILED',
+      lastSubmissionError: 'TESTASP returned HTTP 401 from https://api-stage.evatrauae.com/invoice/send-document-async',
+      lines: [],
+      events: [],
+    };
+    jest.spyOn(service, 'processSubmission').mockResolvedValue(submitted as never);
+
+    const invoice = await service.requeueInvoice('invoice-1');
+
+    expect(queueService.enqueueInvoiceSubmission).not.toHaveBeenCalled();
+    expect(service.processSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(invoice).toBe(submitted);
   });
 
   it('applies webhook status updates when the token matches', async () => {

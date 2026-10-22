@@ -1,17 +1,35 @@
 import axios from 'axios';
 
 const ADMIN_KEY_STORAGE = 'eih_admin_key';
+const ADMIN_KEY_AT_STORAGE = 'eih_admin_key_at';
+const ADMIN_SESSION_MS = 3 * 24 * 60 * 60 * 1000;
 
 export function getAdminKey(): string | null {
-  return localStorage.getItem(ADMIN_KEY_STORAGE);
+  const key = localStorage.getItem(ADMIN_KEY_STORAGE);
+  if (!key) {
+    return null;
+  }
+
+  const storedAt = Number(localStorage.getItem(ADMIN_KEY_AT_STORAGE));
+  const signedInAt = Number.isFinite(storedAt) && storedAt > 0 ? storedAt : Date.now();
+  if (signedInAt !== storedAt) {
+    localStorage.setItem(ADMIN_KEY_AT_STORAGE, String(signedInAt));
+  }
+  if (Date.now() - signedInAt > ADMIN_SESSION_MS) {
+    clearAdminKey();
+    return null;
+  }
+  return key;
 }
 
 export function setAdminKey(key: string) {
   localStorage.setItem(ADMIN_KEY_STORAGE, key);
+  localStorage.setItem(ADMIN_KEY_AT_STORAGE, String(Date.now()));
 }
 
 export function clearAdminKey() {
   localStorage.removeItem(ADMIN_KEY_STORAGE);
+  localStorage.removeItem(ADMIN_KEY_AT_STORAGE);
 }
 
 function resolveApiBaseUrl(): string {
@@ -41,15 +59,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (r) => r,
-  (error) => {
-    if (error.response?.status === 401) {
-      clearAdminKey();
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  },
+  (error) => Promise.reject(error),
 );
 
 /** Returns true only when the server accepts this admin key. */
@@ -248,6 +258,8 @@ export const invoiceApi = {
   list: () => api.get<Invoice[]>('/admin/invoices').then(r => r.data),
   get: (id: number | string) =>
     api.get<Invoice>(`/admin/invoices/${id}`).then((r) => r.data),
+  requeue: (id: number | string) =>
+    api.post<Invoice>(`/admin/invoices/${id}/requeue`).then((r) => r.data),
 };
 
 export default api;

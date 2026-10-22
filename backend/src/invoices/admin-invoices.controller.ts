@@ -3,11 +3,13 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
+import { InvoiceProcessingService } from './invoice-processing.service';
 import { InvoicesService } from './invoices.service';
 
 @ApiTags('Admin - Invoices')
@@ -16,7 +18,10 @@ import { InvoicesService } from './invoices.service';
 @ApiSecurity('admin-key')
 @ApiHeader({ name: 'x-admin-key', required: true, description: 'Admin API key' })
 export class AdminInvoicesController {
-  constructor(private readonly invoicesService: InvoicesService) {}
+  constructor(
+    private readonly invoicesService: InvoicesService,
+    private readonly invoiceProcessingService: InvoiceProcessingService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all invoices (admin)' })
@@ -35,5 +40,11 @@ export class AdminInvoicesController {
   @ApiOperation({ summary: 'Get invoice status (admin)' })
   getStatus(@Param('id', ParseIntPipe) id: number) {
     return this.invoicesService.getStatus(id);
+  }
+
+  @Post(':id/requeue')
+  @ApiOperation({ summary: 'Requeue a failed invoice for ASP submission' })
+  requeue(@Param('id', ParseIntPipe) id: number) {
+    return this.invoiceProcessingService.requeueInvoice(id);
   }
 }

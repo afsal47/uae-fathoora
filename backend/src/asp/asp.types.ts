@@ -38,6 +38,16 @@ export type ParsedWebhookPayload = {
   rawPayload: Record<string, unknown>;
 };
 
+export class AspSubmissionError extends Error {
+  constructor(
+    message: string,
+    readonly responseBody?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'AspSubmissionError';
+  }
+}
+
 export interface AspProviderAdapter {
   readonly provider: string;
   submitInvoice(context: AspSubmissionContext): Promise<AspSubmissionResult>;

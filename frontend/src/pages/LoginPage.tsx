@@ -17,25 +17,8 @@ export default function LoginPage() {
     if (!stored) {
       return;
     }
-    let cancelled = false;
-    verifyAdminKey(stored)
-      .then((valid) => {
-        if (cancelled) return;
-        if (!valid) {
-          clearAdminKey();
-          return;
-        }
-        setAuthed(true);
-      })
-      .catch(() => {
-        if (!cancelled) clearAdminKey();
-      })
-      .finally(() => {
-        if (!cancelled) setChecking(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setAuthed(true);
+    setChecking(false);
   }, []);
 
   if (authed) {
@@ -142,29 +125,8 @@ export function RequireAdmin() {
   const [ok, setOk] = useState(false);
 
   useEffect(() => {
-    const stored = getAdminKey();
-    if (!stored) {
-      setOk(false);
-      setReady(true);
-      return;
-    }
-    let cancelled = false;
-    verifyAdminKey(stored)
-      .then((valid) => {
-        if (cancelled) return;
-        if (!valid) clearAdminKey();
-        setOk(valid);
-        setReady(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        clearAdminKey();
-        setOk(false);
-        setReady(true);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setOk(Boolean(getAdminKey()));
+    setReady(true);
   }, []);
 
   if (!ready) {

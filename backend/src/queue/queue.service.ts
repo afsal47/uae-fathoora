@@ -112,7 +112,10 @@ export class QueueService implements OnModuleDestroy {
       }
 
       setImmediate(() => {
-        void this.inlineProcessor?.(payload);
+        void this.inlineProcessor?.(payload).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Inline invoice job failed: ${message}`);
+        });
       });
       return;
     }
@@ -131,7 +134,10 @@ export class QueueService implements OnModuleDestroy {
       }
 
       setImmediate(() => {
-        void this.webhookInlineProcessor?.(payload);
+        void this.webhookInlineProcessor?.(payload).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Inline webhook job failed: ${message}`);
+        });
       });
       return;
     }
