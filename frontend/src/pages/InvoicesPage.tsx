@@ -24,46 +24,75 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function visibleEntries(data?: Record<string, unknown> | null) {
+function visibleEntries(data?: Record<string, unknown> | null, showEmpty = false) {
   if (!data) return [];
-  return Object.entries(data).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  return Object.entries(data).filter(([, value]) => {
+    if (showEmpty) return value !== undefined;
+    return value !== undefined && value !== null && value !== '';
+  });
 }
 
 function ObjectGrid({
   data,
   columns = 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+  showEmpty = false,
 }: {
   data?: Record<string, unknown> | null;
   columns?: string;
+  showEmpty?: boolean;
 }) {
-  const entries = visibleEntries(data);
+  const entries = visibleEntries(data, showEmpty);
   if (entries.length === 0) return null;
 
   return (
     <div className={`grid items-start gap-x-8 gap-y-4 ${columns}`}>
       {entries.map(([key, value]) => {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
+        if (Array.isArray(value)) {
           return (
             <div key={key} className="col-span-full space-y-2">
               <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{labelize(key)}</p>
-              <ObjectGrid data={value as Record<string, unknown>} columns={columns} />
+              {value.length === 0 ? (
+                <p className="text-sm text-gray-400">—</p>
+              ) : value.every((item) => item && typeof item === 'object' && !Array.isArray(item)) ? (
+                <RecordList items={value as Record<string, unknown>[]} showEmpty={showEmpty} />
+              ) : (
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+                  {JSON.stringify(value, null, 2)}
+                </pre>
+              )}
             </div>
           );
         }
-        if (Array.isArray(value)) return null;
+        if (value && typeof value === 'object') {
+          return (
+            <div key={key} className="col-span-full space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{labelize(key)}</p>
+              <ObjectGrid data={value as Record<string, unknown>} columns={columns} showEmpty={showEmpty} />
+            </div>
+          );
+        }
+        if (showEmpty && (value === null || value === '')) {
+          return <Field key={key} label={labelize(key)} value="—" />;
+        }
         return <Field key={key} label={labelize(key)} value={value as string | number | boolean} />;
       })}
     </div>
   );
 }
 
-function RecordList({ items }: { items?: Record<string, unknown>[] | null }) {
+function RecordList({
+  items,
+  showEmpty = false,
+}: {
+  items?: Record<string, unknown>[] | null;
+  showEmpty?: boolean;
+}) {
   if (!items || items.length === 0) return null;
   return (
     <div className="space-y-2">
       {items.map((item, index) => (
         <div key={index} className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-          <ObjectGrid data={item} columns="grid-cols-2 sm:grid-cols-3" />
+          <ObjectGrid data={item} columns="grid-cols-2 sm:grid-cols-3" showEmpty={showEmpty} />
         </div>
       ))}
     </div>
@@ -108,6 +137,7 @@ function PartyBlock({
 }) {
   const registration = visibleEntries(extras?.legalRegistration);
   const contact = visibleEntries(extras?.contact);
+  const more = restFields(extras, SHOWN_PARTY_KEYS);
 
   return (
     <div className="h-full rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -142,6 +172,11 @@ function PartyBlock({
           <ObjectGrid data={extras?.contact} columns="grid-cols-2" />
         </div>
       )}
+      {more && (
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          <ObjectGrid data={more} columns="grid-cols-2" />
+        </div>
+      )}
     </div>
   );
 }
@@ -164,16 +199,165 @@ function formatDocumentType(documentType: string) {
   return DOCUMENT_TYPE_LABELS[documentType] ?? documentType;
 }
 
-function formatAspResponse(value: string) {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
+function formatWhen(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+const SHOWN_SOURCE_KEYS = new Set([
+  'taxPointDate',
+  'dueDate',
+  'taxCurrencyCode',
+  'accountingCost',
+  'contractReference',
+  'principalTrn',
+  'profileExecutionId',
+  'exchangeRate',
+  'taxInclusiveAmountInAed',
+  'creditNoteReasonCode',
+  'reasonCode',
+  'againstCreditNoteId',
+  'againstDCNoteId',
+  'precedingInvoiceRef',
+  'seller',
+  'buyer',
+  'paymentMeans',
+  'paymentTerms',
+  'delivery',
+  'invoicePeriod',
+  'orderReference',
+  'references',
+  'transactionFlags',
+  'allowanceCharges',
+  'lines',
+  'sourceSystemDCNoteId',
+]);
+
+function additionalSourceFields(src: InvoiceSourcePayload | null) {
+  if (!src) return null;
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(src)) {
+    if (!SHOWN_SOURCE_KEYS.has(key)) extra[key] = value;
   }
+  return visibleEntries(extra).length > 0 ? extra : null;
+}
+
+function restFields(data: Record<string, unknown> | null | undefined, shown: Set<string>) {
+  if (!data) return null;
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!shown.has(key)) extra[key] = value;
+  }
+  return visibleEntries(extra).length > 0 ? extra : null;
+}
+
+const SHOWN_PARTY_KEYS = new Set([
+  'endpointId',
+  'endpointScheme',
+  'legalRegistration',
+  'contact',
+  'addressLine3',
+]);
+
+const SHOWN_LINE_KEYS = new Set([
+  'itemDescription',
+  'unitCode',
+  'vatExemptionReason',
+  'vatExemptionReasonCode',
+  'rcmNatureCode',
+  'classificationId',
+  'classificationScheme',
+  'accountingCost',
+  'orderLineReferenceId',
+  'invoicePeriod',
+  'allowanceCharges',
+]);
+
+function AspResponseFields({ raw }: { raw?: string | null }) {
+  if (!raw) {
+    return <p className="text-sm text-gray-400">No ASP response stored for this invoice.</p>;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return (
+        <ObjectGrid
+          data={parsed as Record<string, unknown>}
+          columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+          showEmpty
+        />
+      );
+    }
+    return (
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+        {JSON.stringify(parsed, null, 2)}
+      </pre>
+    );
+  } catch {
+    return (
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+        {raw}
+      </pre>
+    );
+  }
+}
+
+function InvoiceXml({ invoiceId }: { invoiceId: number }) {
+  const [xml, setXml] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setXml(null);
+    setError('');
+    invoiceApi
+      .xml(invoiceId)
+      .then((body) => {
+        if (!cancelled) setXml(typeof body === 'string' ? body : String(body));
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load the Peppol XML for this invoice.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceId]);
+
+  return (
+    <Section title="Peppol XML">
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {!error && xml === null && <p className="text-sm text-gray-400">Loading XML…</p>}
+      {xml && (
+        <div>
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(xml).then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+              className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            >
+              {copied ? 'Copied' : 'Copy XML'}
+            </button>
+          </div>
+          <pre className="max-h-96 overflow-auto whitespace-pre rounded-lg bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100">
+            {xml}
+          </pre>
+        </div>
+      )}
+    </Section>
+  );
 }
 
 function InvoiceDetails({ inv }: { inv: Invoice }) {
   const src = inv.sourcePayload ?? null;
+  const extraSource = additionalSourceFields(src);
   const lineExtras = src?.lines ?? [];
   const creditReasonCode = src?.creditNoteReasonCode || src?.reasonCode;
   const againstDCNoteId =
@@ -204,8 +388,16 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           <Field label="Exchange Rate" value={src?.exchangeRate} />
           <Field label="Tax Inclusive Amount (AED)" value={src?.taxInclusiveAmountInAed} />
           <Field label="Attempts" value={inv.submissionAttempts} />
-          {inv.aspMessageId && <Field label="ASP Message ID" value={inv.aspMessageId} />}
-          {inv.aspReferenceId && <Field label="ASP Reference ID" value={inv.aspReferenceId} />}
+          <Field label="Idempotency Key" value={inv.idempotencyKey} />
+          <Field label="Created" value={formatWhen(inv.createdAt)} />
+          <Field label="Updated" value={formatWhen(inv.updatedAt)} />
+          <Field label="Last Submission" value={formatWhen(inv.lastSubmissionAt)} />
+          <Field label="Submitted" value={formatWhen(inv.submittedAt)} />
+          <Field label="Accepted" value={formatWhen(inv.acceptedAt)} />
+          <Field label="Rejected" value={formatWhen(inv.rejectedAt)} />
+          <Field label="Cancelled" value={formatWhen(inv.cancelledAt)} />
+          <Field label="ASP Message ID" value={inv.aspMessageId || '—'} />
+          <Field label="ASP Reference ID" value={inv.aspReferenceId || '—'} />
           {inv.notes && (
             <div className="col-span-2 md:col-span-4">
               <Field label="Notes" value={inv.notes} />
@@ -222,14 +414,6 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
               <p className="text-gray-400 text-xs">ASP error</p>
               <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
                 {inv.lastSubmissionError}
-              </pre>
-            </div>
-          )}
-          {inv.status === 'FAILED' && inv.aspResponse && (
-            <div className="col-span-2 md:col-span-4">
-              <p className="text-gray-400 text-xs">ASP response</p>
-              <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-red-50 p-3 font-mono text-xs text-red-800">
-                {formatAspResponse(inv.aspResponse)}
               </pre>
             </div>
           )}
@@ -386,6 +570,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
             <tbody className="divide-y divide-gray-100">
               {inv.lines.map((line, idx) => {
                 const extra = lineExtras[idx];
+                const moreLineFields = restFields(extra, SHOWN_LINE_KEYS);
                 return (
                   <tr key={line.id}>
                     <td className="px-3 py-2 text-gray-500 align-top">{line.lineNumber}</td>
@@ -423,6 +608,11 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
                           {extra.allowanceCharges && extra.allowanceCharges.length > 0 && (
                             <div className="mt-1">
                               <RecordList items={extra.allowanceCharges} />
+                            </div>
+                          )}
+                          {moreLineFields && (
+                            <div className="mt-2">
+                              <ObjectGrid data={moreLineFields} columns="grid-cols-2" />
                             </div>
                           )}
                         </div>
@@ -475,6 +665,18 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           </div>
         </Section>
       )}
+
+      {extraSource && (
+        <Section title="Source fields">
+          <ObjectGrid data={extraSource} showEmpty />
+        </Section>
+      )}
+
+      <Section title="ASP response">
+        <AspResponseFields raw={inv.aspResponse} />
+      </Section>
+
+      <InvoiceXml invoiceId={inv.id} />
 
       {inv.events.length > 0 && (
         <Section title="Event Timeline">

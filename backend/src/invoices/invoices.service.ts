@@ -24,6 +24,21 @@ import {
 } from './asp-payload.storage';
 import { EVENT_TYPE, INVOICE_STATUS } from './invoice.constants';
 
+/** Keep source-system fields the hub does not already map onto columns. */
+function extraFields(
+  source: object | null | undefined,
+  knownKeys: readonly string[],
+): Record<string, unknown> {
+  if (!source) return {};
+  const known = new Set(knownKeys);
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (known.has(key) || value === undefined) continue;
+    extra[key] = value;
+  }
+  return extra;
+}
+
 type TenantIntegration = {
   tenant: Tenant;
   integration: Integration;
@@ -305,9 +320,17 @@ export class InvoicesService {
     return this.withSourcePayload(invoice);
   }
 
+  async getXml(id: number): Promise<string> {
+    return this.loadXml(id);
+  }
+
   async getXmlForIntegration(integrationId: string, id: number): Promise<string> {
+    return this.loadXml(id, integrationId);
+  }
+
+  private async loadXml(id: number, integrationId?: string): Promise<string> {
     const invoice = await this.prisma.invoice.findFirst({
-      where: { id, integrationId },
+      where: { id, ...(integrationId ? { integrationId } : {}) },
       include: {
         tenant: true,
         integration: true,
@@ -545,7 +568,7 @@ export class InvoicesService {
   }
 
   private extractPassthroughFields(dto: CreateInvoiceDto): Record<string, unknown> {
-    return {
+    const known: Record<string, unknown> = {
       taxPointDate: dto.taxPointDate,
       dueDate: dto.dueDate,
       taxCurrencyCode: dto.taxCurrencyCode,
@@ -569,36 +592,90 @@ export class InvoicesService {
       transactionFlags: dto.transactionFlags,
       profileExecutionId: dto.profileExecutionId,
       principalTrn: dto.principalTrn,
-      exchangeRate: dto.exchangeRate,
+      exchangeRate: dto.VatFxRateAED ?? dto.exchangeRate,
+      VatFxRateAED: dto.VatFxRateAED ?? dto.exchangeRate,
+      InvoiceAmountAED: dto.InvoiceAmountAED,
+      VATAmountAED: dto.VATAmountAED,
       taxInclusiveAmountInAed: dto.taxInclusiveAmountInAed,
       references: dto.references,
-      seller: {
-        endpointId: dto.seller.endpointId,
-        endpointScheme: dto.seller.endpointScheme,
-        legalRegistration: dto.seller.legalRegistration,
-        contact: dto.seller.contact,
-        addressLine3: dto.seller.address?.line3,
-      },
-      buyer: {
-        endpointId: dto.buyer.endpointId,
-        endpointScheme: dto.buyer.endpointScheme,
-        legalRegistration: dto.buyer.legalRegistration,
-        contact: dto.buyer.contact,
-        addressLine3: dto.buyer.address?.line3,
-      },
-      lines: dto.lines.map((l) => ({
-        unitCode: l.unitCode,
-        itemDescription: l.itemDescription,
-        vatExemptionReason: l.vatExemptionReason,
-        vatExemptionReasonCode: l.vatExemptionReasonCode,
-        rcmNatureCode: l.rcmNatureCode,
-        classificationId: l.classificationId,
-        classificationScheme: l.classificationScheme,
-        accountingCost: l.accountingCost,
-        orderLineReferenceId: l.orderLineReferenceId,
-        invoicePeriod: l.invoicePeriod,
-        allowanceCharges: l.allowanceCharges,
-      })),
+      seller: this.partyPassthrough(dto.seller),
+      buyer: this.partyPassthrough(dto.buyer),
+      lines: dto.lines.map((line) => this.linePassthrough(line)),
+    };
+
+    return {
+      ...known,
+      ...extraFields(dto, [
+        ...Object.keys(known),
+        'tenantCode',
+        'sourceSystem',
+        'sourceDocumentId',
+        'idempotencyKey',
+        'documentType',
+        'issueDate',
+        'currencyCode',
+        'notes',
+        'invoiceNumber',
+        'sourceSystemCreditNoteId',
+      ]),
+    };
+  }
+
+  private partyPassthrough(party: CreateInvoiceDto['seller']): Record<string, unknown> {
+    const addressExtras = extraFields(party.address, [
+      'line1',
+      'line2',
+      'line3',
+      'city',
+      'state',
+      'postalCode',
+      'countryCode',
+    ]);
+
+    return {
+      endpointId: party.endpointId,
+      endpointScheme: party.endpointScheme,
+      legalRegistration: party.legalRegistration,
+      contact: party.contact,
+      addressLine3: party.address?.line3,
+      ...extraFields(party, [
+        'name',
+        'trn',
+        'address',
+        'endpointId',
+        'endpointScheme',
+        'legalRegistration',
+        'contact',
+      ]),
+      ...(Object.keys(addressExtras).length > 0 ? { address: addressExtras } : {}),
+    };
+  }
+
+  private linePassthrough(line: CreateInvoiceDto['lines'][number]): Record<string, unknown> {
+    const known = {
+      unitCode: line.unitCode,
+      itemDescription: line.itemDescription,
+      vatExemptionReason: line.vatExemptionReason,
+      vatExemptionReasonCode: line.vatExemptionReasonCode,
+      rcmNatureCode: line.rcmNatureCode,
+      classificationId: line.classificationId,
+      classificationScheme: line.classificationScheme,
+      accountingCost: line.accountingCost,
+      orderLineReferenceId: line.orderLineReferenceId,
+      invoicePeriod: line.invoicePeriod,
+      allowanceCharges: line.allowanceCharges,
+    };
+
+    return {
+      ...known,
+      ...extraFields(line, [
+        'description',
+        'quantity',
+        'unitPrice',
+        'vatRate',
+        'vatCategory',
+        ...Object.keys(known),
+      ]),
     };
   }
 

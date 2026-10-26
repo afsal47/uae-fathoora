@@ -162,6 +162,8 @@ export type InvoiceSourcePayload = {
     legalRegistration?: Record<string, unknown>;
     contact?: Record<string, unknown>;
     addressLine3?: string;
+    address?: Record<string, unknown>;
+    [key: string]: unknown;
   };
   buyer?: {
     endpointId?: string;
@@ -169,6 +171,8 @@ export type InvoiceSourcePayload = {
     legalRegistration?: Record<string, unknown>;
     contact?: Record<string, unknown>;
     addressLine3?: string;
+    address?: Record<string, unknown>;
+    [key: string]: unknown;
   };
   lines?: Array<{
     unitCode?: string;
@@ -182,6 +186,7 @@ export type InvoiceSourcePayload = {
     orderLineReferenceId?: string;
     invoicePeriod?: Record<string, unknown>;
     allowanceCharges?: Record<string, unknown>[];
+    [key: string]: unknown;
   }>;
   [key: string]: unknown;
 };
@@ -260,6 +265,13 @@ export const invoiceApi = {
     api.get<Invoice>(`/admin/invoices/${id}`).then((r) => r.data),
   requeue: (id: number | string) =>
     api.post<Invoice>(`/admin/invoices/${id}/requeue`).then((r) => r.data),
+  xml: (id: number | string) =>
+    api
+      .get<string>(`/admin/invoices/${id}/xml`, {
+        responseType: 'text',
+        transformResponse: [(data) => data],
+      })
+      .then((r) => r.data),
 };
 
 export default api;

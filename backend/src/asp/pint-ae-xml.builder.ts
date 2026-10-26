@@ -1,6 +1,5 @@
-import { PintAeInvoice, PintAeParty, PintAeAllowanceCharge } from './pint-ae-payload.builder';
+import { PintAeInvoice, PintAeLine, PintAeParty, PintAeAllowanceCharge } from './pint-ae-payload.builder';
 import {
-  UAE_ENDPOINT_SCHEME,
   buildProfileExecutionId,
   getPeppolProfileIds,
   isCreditNoteDocument,
@@ -44,39 +43,30 @@ function vatCat(category: string): string {
   return VAT_CATEGORY_CODES[category.toUpperCase().trim()] ?? 'S';
 }
 
-function deriveTin(trn?: string): string {
-  if (!trn) return '';
-  return trn.replace(/\D/g, '').substring(0, 10);
-}
-
 function opt(condition: unknown, xml: string): string {
   return condition ? xml : '';
 }
 
-function buildPartyXml(tag: string, party: PintAeParty, role: 'seller' | 'buyer'): string {
-  const tin = deriveTin(party.trn);
-  const epId = party.endpointId ?? tin;
-  const epScheme = party.endpointScheme ?? UAE_ENDPOINT_SCHEME;
+function countryCode(code: string | undefined | null): string {
+  return esc(code?.trim().toUpperCase());
+}
+
+function legalRegistrationId(party: PintAeParty): string {
   const lr = party.legalRegistration;
-  const ct = party.contact;
-
-  const legalRegEntry = lr?.tradeLicense
-    ? { scheme: 'TL', id: lr.tradeLicense }
-    : lr?.emiratesId
-      ? { scheme: 'EID', id: lr.emiratesId }
-      : lr?.passport
-        ? { scheme: 'PAS', id: lr.passport }
-        : lr?.commercialRegistration
-          ? { scheme: 'CD', id: lr.commercialRegistration }
-          : null;
-
-  const partyLegalEntityCompanyId = legalRegEntry
-    ? `<cbc:CompanyID schemeAgencyID="${esc(legalRegEntry.scheme)}"${
-        lr?.schemeAgencyName
-          ? ` schemeAgencyName="${esc(lr.schemeAgencyName)}"`
-          : ''
-      }>${esc(legalRegEntry.id)}</cbc:CompanyID>`
+  const id =
+    lr?.tradeLicense || lr?.emiratesId || lr?.passport || lr?.commercialRegistration;
+  if (!id) return '';
+  const agency = lr?.schemeAgencyName
+    ? ` schemeAgencyName="${esc(lr.schemeAgencyName)}"`
     : '';
+  return `<cbc:CompanyID${agency}>${esc(id)}</cbc:CompanyID>`;
+}
+
+function buildPartyXml(tag: string, party: PintAeParty): string {
+  const epId = party.endpointId;
+  const epScheme = party.endpointScheme;
+  const ct = party.contact;
+  const partyLegalEntityCompanyId = legalRegistrationId(party);
 
   const contactXml = ct ? `
       <cac:Contact>
@@ -85,12 +75,16 @@ function buildPartyXml(tag: string, party: PintAeParty, role: 'seller' | 'buyer'
         ${opt(ct.email, `<cbc:ElectronicMail>${esc(ct.email)}</cbc:ElectronicMail>`)}
       </cac:Contact>` : '';
 
+  const endpointXml = epId
+    ? `<cbc:EndpointID${epScheme ? ` schemeID="${esc(epScheme)}"` : ''}>${esc(epId)}</cbc:EndpointID>`
+    : '';
+
   return `
     <cac:${tag}>
-      ${epId ? `<cbc:EndpointID schemeID="${esc(epScheme)}">${esc(epId)}</cbc:EndpointID>` : ''}
-      <cac:PartyIdentification>
-        <cbc:ID${party.trn ? ' schemeID="TRN"' : ''}>${esc(party.trn ?? party.name)}</cbc:ID>
-      </cac:PartyIdentification>
+      ${endpointXml}
+      ${opt(party.trn, `<cac:PartyIdentification>
+        <cbc:ID>${esc(party.trn)}</cbc:ID>
+      </cac:PartyIdentification>`)}
       <cac:PartyName>
         <cbc:Name>${esc(party.name)}</cbc:Name>
       </cac:PartyName>
@@ -102,15 +96,15 @@ function buildPartyXml(tag: string, party: PintAeParty, role: 'seller' | 'buyer'
         ${opt(party.address.postalCode, `<cbc:PostalZone>${esc(party.address.postalCode)}</cbc:PostalZone>`)}
         ${opt(party.address.state, `<cbc:CountrySubentity>${esc(party.address.state)}</cbc:CountrySubentity>`)}
         <cac:Country>
-          <cbc:IdentificationCode>${esc(party.address.countryCode)}</cbc:IdentificationCode>
+          <cbc:IdentificationCode>${countryCode(party.address.countryCode)}</cbc:IdentificationCode>
         </cac:Country>
       </cac:PostalAddress>
-      <cac:PartyTaxScheme>
-        <cbc:CompanyID>${esc(party.trn ?? '')}</cbc:CompanyID>
+      ${opt(party.trn, `<cac:PartyTaxScheme>
+        <cbc:CompanyID>${esc(party.trn)}</cbc:CompanyID>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>
-      </cac:PartyTaxScheme>
+      </cac:PartyTaxScheme>`)}
       <cac:PartyLegalEntity>
         <cbc:RegistrationName>${esc(party.name)}</cbc:RegistrationName>
         ${partyLegalEntityCompanyId}
@@ -170,7 +164,7 @@ function buildDeliveryXml(invoice: PintAeInvoice): string {
         ${opt(d.address.line1, `<cbc:StreetName>${esc(d.address.line1)}</cbc:StreetName>`)}
         ${opt(d.address.city, `<cbc:CityName>${esc(d.address.city)}</cbc:CityName>`)}
         ${opt(d.address.postalCode, `<cbc:PostalZone>${esc(d.address.postalCode)}</cbc:PostalZone>`)}
-        ${d.address.countryCode ? `<cac:Country><cbc:IdentificationCode>${esc(d.address.countryCode)}</cbc:IdentificationCode></cac:Country>` : ''}
+        ${d.address.countryCode ? `<cac:Country><cbc:IdentificationCode>${countryCode(d.address.countryCode)}</cbc:IdentificationCode></cac:Country>` : ''}
       </cac:Address>
     </cac:DeliveryLocation>` : ''}
     ${d.partyName ? `<cac:DeliveryParty><cac:PartyName><cbc:Name>${esc(d.partyName)}</cbc:Name></cac:PartyName></cac:DeliveryParty>` : ''}
@@ -197,6 +191,37 @@ function taxPercentXml(category: string, rate: number): string {
   return `<cbc:Percent>${amt(pct)}</cbc:Percent>`;
 }
 
+function isZeroRated(category: string): boolean {
+  return vatCat(category) === 'Z';
+}
+
+/** AED net (BTAE-10) and AED VAT (BTAE-08) for the single invoice line. */
+function aedLineAmounts(
+  invoice: PintAeInvoice,
+  line: PintAeLine,
+): { net?: number; vat?: number } {
+  const vat = isZeroRated(line.vatCategory) ? 0 : undefined;
+  if (invoice.lines.length === 1 && invoice.invoiceAmountAed !== undefined) {
+    return {
+      net: invoice.invoiceAmountAed,
+      vat: vat === 0 ? 0 : invoice.vatAmountAed,
+    };
+  }
+  if (invoice.currencyCode === 'AED') {
+    return {
+      net: line.netAmount,
+      vat: vat === 0 ? 0 : line.taxAmount,
+    };
+  }
+  return { net: undefined, vat: vat };
+}
+
+function aedInvoiceAmounts(invoice: PintAeInvoice): { net?: number; vat?: number } {
+  const line = invoice.lines[0];
+  if (!line) return {};
+  return aedLineAmounts(invoice, line);
+}
+
 function buildTaxTotalXml(invoice: PintAeInvoice): string {
   const breakdownXml = invoice.totals.taxBreakdown
     .map(
@@ -217,10 +242,26 @@ function buildTaxTotalXml(invoice: PintAeInvoice): string {
     )
     .join('');
 
-  return `
+  const documentTaxTotal = `
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="${invoice.currencyCode}">${amt(invoice.totals.taxAmount)}</cbc:TaxAmount>
     ${breakdownXml}
+  </cac:TaxTotal>`;
+
+  // IBT-111 is a second tax total in AED. When the invoice currency is already AED,
+  // the document tax total above is that amount and keeps the same sign.
+  if (invoice.currencyCode === 'AED') {
+    return documentTaxTotal;
+  }
+
+  const vatAed = aedInvoiceAmounts(invoice).vat;
+  if (vatAed === undefined) {
+    return documentTaxTotal;
+  }
+
+  return `${documentTaxTotal}
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="AED">${amt(vatAed)}</cbc:TaxAmount>
   </cac:TaxTotal>`;
 }
 
@@ -241,6 +282,18 @@ function buildInvoiceLinesXml(invoice: PintAeInvoice, isCreditNote: boolean): st
             ${opt(line.invoicePeriod.endDate, `<cbc:EndDate>${esc(line.invoicePeriod.endDate)}</cbc:EndDate>`)}
           </cac:InvoicePeriod>`
         : '';
+
+      const aed = aedLineAmounts(invoice, line);
+      const itemPriceExtension =
+        aed.net === undefined
+          ? ''
+          : `
+    <cac:ItemPriceExtension>
+      <cbc:Amount currencyID="AED">${amt(aed.net)}</cbc:Amount>
+      ${aed.vat === undefined ? '' : `<cac:TaxTotal>
+        <cbc:TaxAmount currencyID="AED">${amt(aed.vat)}</cbc:TaxAmount>
+      </cac:TaxTotal>`}
+    </cac:ItemPriceExtension>`;
 
       return `
   <cac:${lineTag}>
@@ -280,9 +333,7 @@ function buildInvoiceLinesXml(invoice: PintAeInvoice, isCreditNote: boolean): st
         <cbc:BaseAmount currencyID="${invoice.currencyCode}">${amt(line.unitPrice)}</cbc:BaseAmount>
       </cac:AllowanceCharge>
     </cac:Price>
-    <cac:ItemPriceExtension>
-      <cbc:Amount currencyID="${invoice.currencyCode}">${amt(line.netAmount + line.taxAmount)}</cbc:Amount>
-    </cac:ItemPriceExtension>
+    ${itemPriceExtension}
   </cac:${lineTag}>`;
     })
     .join('');
@@ -316,24 +367,25 @@ function buildPrincipalPartyXml(principalTrn?: string): string {
 }
 
 function buildFxXml(invoice: PintAeInvoice): string {
-  if (!invoice.exchangeRate || invoice.currencyCode === 'AED') {
-    return '';
-  }
-
+  const aed = aedInvoiceAmounts(invoice);
   const aedTotal =
-    invoice.taxInclusiveAmountInAed !== undefined
+    aed.net !== undefined && aed.vat !== undefined
       ? `
   <cac:AdditionalDocumentReference>
     <cbc:ID>AED</cbc:ID>
     <cbc:DocumentTypeCode>aedtotal-incl-vat</cbc:DocumentTypeCode>
-    <cbc:DocumentDescription>${amt(invoice.taxInclusiveAmountInAed)}</cbc:DocumentDescription>
+    <cbc:DocumentDescription>${amt(aed.net + aed.vat)}</cbc:DocumentDescription>
   </cac:AdditionalDocumentReference>`
       : '';
+
+  if (invoice.currencyCode === 'AED' || invoice.exchangeRate === undefined) {
+    return aedTotal;
+  }
 
   return `
   <cac:TaxExchangeRate>
     <cbc:SourceCurrencyCode>${esc(invoice.currencyCode)}</cbc:SourceCurrencyCode>
-    <cbc:TargetCurrencyCode>${esc(invoice.taxCurrencyCode ?? 'AED')}</cbc:TargetCurrencyCode>
+    <cbc:TargetCurrencyCode>AED</cbc:TargetCurrencyCode>
     <cbc:CalculationRate>${invoice.exchangeRate}</cbc:CalculationRate>
   </cac:TaxExchangeRate>${aedTotal}`;
 }
@@ -375,7 +427,7 @@ export function buildPintAeXml(invoice: PintAeInvoice): string {
   ${opt(invoice.notes, `<cbc:Note>${esc(invoice.notes)}</cbc:Note>`)}
   ${buildTransactionFlagsXml(invoice.transactionFlags)}
   <cbc:DocumentCurrencyCode>${esc(invoice.currencyCode)}</cbc:DocumentCurrencyCode>
-  <cbc:TaxCurrencyCode>${esc(invoice.taxCurrencyCode ?? 'AED')}</cbc:TaxCurrencyCode>
+  <cbc:TaxCurrencyCode>AED</cbc:TaxCurrencyCode>
   ${opt(invoice.accountingCost, `<cbc:AccountingCost>${esc(invoice.accountingCost)}</cbc:AccountingCost>`)}
 
   ${buildInvoicePeriodXml(invoice.invoicePeriod)}
@@ -396,11 +448,11 @@ export function buildPintAeXml(invoice: PintAeInvoice): string {
   ${buildFxXml(invoice)}
 
   <cac:AccountingSupplierParty>
-    ${buildPartyXml('Party', invoice.seller, 'seller')}
+    ${buildPartyXml('Party', invoice.seller)}
   </cac:AccountingSupplierParty>
 
   <cac:AccountingCustomerParty>
-    ${buildPartyXml('Party', invoice.buyer, 'buyer')}
+    ${buildPartyXml('Party', invoice.buyer)}
   </cac:AccountingCustomerParty>
 
   ${buildPrincipalPartyXml(invoice.principalTrn)}
