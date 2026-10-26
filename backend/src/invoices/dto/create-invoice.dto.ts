@@ -150,15 +150,18 @@ class PartyDto {
   @MaxLength(50)
   trn?: string;
 
-  @ApiPropertyOptional({ description: 'Peppol endpoint ID (defaults to first 10 digits of TRN)' })
+  @ApiPropertyOptional({
+    description:
+      'Peppol endpoint ID. Written only when IBMS sends it. The hub does not derive it from the TRN.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   endpointId?: string;
 
   @ApiPropertyOptional({
-    description: 'Peppol endpoint scheme (defaults to 0235 — UAE TIN)',
-    default: '0235',
+    description:
+      'ISO 6523 ICD for the endpoint. Written only when IBMS sends it with endpointId.',
   })
   @IsOptional()
   @IsString()
@@ -768,7 +771,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'UAE Central Bank exchange rate (invoice currency → AED). Required when currencyCode is not AED.',
+      'UAE Central Bank exchange rate (invoice currency → AED). VatFxRateAED is the IBMS name for the same value.',
     example: 3.6725,
   })
   @IsOptional()
@@ -779,8 +782,39 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'Document tax-inclusive total in AED (aedtotal-incl-vat). Required when currencyCode is not AED.',
-    example: 1928.25,
+      'Exchange rate from the invoice currency to AED (BTAE-04). Same value as exchangeRate. 1 when currencyCode is AED.',
+    example: 3.6725,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  VatFxRateAED?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Invoice amount in AED excluding VAT. Not the gross total. The single line amount in AED (BTAE-10).',
+    example: 3672.5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  InvoiceAmountAED?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Invoice VAT in AED (BTAE-08 / IBT-111). Already 0 when the line VAT category is Z.',
+    example: 183.63,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  VATAmountAED?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Unused for BTAE-20. The AED total with VAT is InvoiceAmountAED + VATAmountAED.',
+    example: 3856.13,
   })
   @IsOptional()
   @Type(() => Number)

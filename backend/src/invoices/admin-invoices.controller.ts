@@ -1,13 +1,21 @@
 import {
   Controller,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiHeader,
+  ApiOperation,
+  ApiProduces,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { InvoiceProcessingService } from './invoice-processing.service';
 import { InvoicesService } from './invoices.service';
@@ -28,6 +36,14 @@ export class AdminInvoicesController {
   @ApiQuery({ name: 'sourceDocumentId', required: false })
   findAll(@Query('sourceDocumentId') sourceDocumentId?: string) {
     return this.invoicesService.findAll(sourceDocumentId);
+  }
+
+  @Get(':id/xml')
+  @ApiOperation({ summary: 'Get Peppol PINT-AE XML for an invoice (admin)' })
+  @ApiProduces('application/xml')
+  @Header('Content-Type', 'application/xml; charset=utf-8')
+  getXml(@Param('id', ParseIntPipe) id: number) {
+    return this.invoicesService.getXml(id);
   }
 
   @Get(':id')

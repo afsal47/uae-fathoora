@@ -148,6 +148,10 @@ export type PintAeInvoice = {
   profileExecutionId?: string;
   principalTrn?: string;
   exchangeRate?: number;
+  /** Invoice amount in AED excluding VAT (BTAE-10). */
+  invoiceAmountAed?: number;
+  /** Invoice VAT in AED (BTAE-08 / IBT-111). */
+  vatAmountAed?: number;
   taxInclusiveAmountInAed?: number;
   metadata: {
     sourceSystem: string;
@@ -247,7 +251,7 @@ export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice
     taxPointDate: dto?.taxPointDate,
     dueDate: dto?.dueDate,
     currencyCode: invoice.currencyCode,
-    taxCurrencyCode: dto?.taxCurrencyCode ?? 'AED',
+    taxCurrencyCode: 'AED',
     accountingCost: dto?.accountingCost,
     contractReference: dto?.contractReference,
     seller: buildParty(
@@ -295,7 +299,9 @@ export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice
     transactionFlags: dto?.transactionFlags,
     profileExecutionId: dto?.profileExecutionId,
     principalTrn: dto?.principalTrn,
-    exchangeRate: dto?.exchangeRate,
+    exchangeRate: dto?.VatFxRateAED ?? dto?.exchangeRate,
+    invoiceAmountAed: dto?.InvoiceAmountAED,
+    vatAmountAed: dto?.VATAmountAED,
     taxInclusiveAmountInAed: dto?.taxInclusiveAmountInAed,
     notes: invoice.notes ?? undefined,
     metadata: {
