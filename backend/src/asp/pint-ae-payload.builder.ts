@@ -15,6 +15,8 @@ export type PintAeParty = {
     countryCode: string;
   };
   legalRegistration?: {
+    registrationType?: 'TL' | 'EID' | 'PAS' | 'CD';
+    registrationNumber?: string;
     tradeLicense?: string;
     emiratesId?: string;
     passport?: string;
@@ -169,6 +171,56 @@ export function toPeppolInvoiceNumber(invoiceNumber: string): string {
   return `inv-${trimmed}`;
 }
 
+type LegalRegistrationInput = NonNullable<PintAeParty['legalRegistration']>;
+
+/**
+ * Maps source-system registrationType + registrationNumber onto the typed
+ * ID fields used in XML (tradeLicense / emiratesId / passport / CD).
+ * Explicit typed fields still win if both styles are sent.
+ */
+export function normalizeLegalRegistration(
+  lr?: LegalRegistrationInput | null,
+): LegalRegistrationInput | undefined {
+  if (!lr) return undefined;
+
+  const type = lr.registrationType?.trim().toUpperCase() as
+    | LegalRegistrationInput['registrationType']
+    | undefined;
+  const number = lr.registrationNumber?.trim() || undefined;
+
+  const resolved: LegalRegistrationInput = {
+    registrationType: type,
+    registrationNumber: number,
+    tradeLicense: lr.tradeLicense?.trim() || undefined,
+    emiratesId: lr.emiratesId?.trim() || undefined,
+    passport: lr.passport?.trim() || undefined,
+    commercialRegistration: lr.commercialRegistration?.trim() || undefined,
+    schemeAgencyName: lr.schemeAgencyName?.trim() || undefined,
+  };
+
+  if (type && number) {
+    if (type === 'TL') resolved.tradeLicense ??= number;
+    else if (type === 'EID') resolved.emiratesId ??= number;
+    else if (type === 'PAS') resolved.passport ??= number;
+    else if (type === 'CD') resolved.commercialRegistration ??= number;
+  }
+
+  if (!resolved.registrationType) {
+    if (resolved.tradeLicense) resolved.registrationType = 'TL';
+    else if (resolved.emiratesId) resolved.registrationType = 'EID';
+    else if (resolved.passport) resolved.registrationType = 'PAS';
+    else if (resolved.commercialRegistration) resolved.registrationType = 'CD';
+  }
+
+  const hasId =
+    resolved.tradeLicense ||
+    resolved.emiratesId ||
+    resolved.passport ||
+    resolved.commercialRegistration ||
+    resolved.schemeAgencyName;
+  return hasId || resolved.registrationType ? resolved : undefined;
+}
+
 export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice {
   const { invoice } = context;
   const dto = context.createInvoiceDto;
@@ -240,7 +292,7 @@ export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice
       postalCode: addr.postalCode ?? undefined,
       countryCode: addr.countryCode ?? 'AE',
     },
-    legalRegistration: dtoParty?.legalRegistration,
+    legalRegistration: normalizeLegalRegistration(dtoParty?.legalRegistration),
     contact: dtoParty?.contact,
   });
 
