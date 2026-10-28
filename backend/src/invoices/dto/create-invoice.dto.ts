@@ -4,6 +4,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -14,7 +15,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   DOCUMENT_TYPES,
   type DocumentType,
@@ -81,7 +82,33 @@ class PartyAddressDto {
   countryCode?: string;
 }
 
+export const LEGAL_REGISTRATION_TYPES = ['TL', 'EID', 'PAS', 'CD'] as const;
+export type LegalRegistrationType = (typeof LEGAL_REGISTRATION_TYPES)[number];
+
 class LegalRegistrationDto {
+  @ApiPropertyOptional({
+    enum: LEGAL_REGISTRATION_TYPES,
+    description:
+      'BTAE-15 / BTAE-16 — which ID registrationNumber is. TL=trade license, EID=Emirates ID, PAS=passport, CD=cabinet decision.',
+    example: 'TL',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsIn(LEGAL_REGISTRATION_TYPES)
+  registrationType?: LegalRegistrationType;
+
+  @ApiPropertyOptional({
+    description:
+      'The registration ID for registrationType. For TL this is the trade license number; for EID the Emirates ID; for PAS the passport number; for CD the cabinet decision number.',
+    example: '59849',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  registrationNumber?: string;
+
   @ApiPropertyOptional({ description: 'Trade License number (BT-30, scheme TL)' })
   @IsOptional()
   @IsString()
@@ -108,7 +135,7 @@ class LegalRegistrationDto {
 
   @ApiPropertyOptional({
     description:
-      'BTAE-12 — issuing authority name (e.g. Department of Economic Development). Required with legal registration ID.',
+      'BTAE-12 — issuing authority name (e.g. Department of Economic Development). Required when registrationType is TL.',
     example: 'Department of Economic Development',
   })
   @IsOptional()

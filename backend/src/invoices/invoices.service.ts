@@ -6,6 +6,7 @@ import {
 import { Integration, Invoice, InvoiceLine, Prisma, Tenant } from '@prisma/client';
 import {
   buildPintAePayload,
+  normalizeLegalRegistration,
   toPeppolInvoiceNumber,
 } from '../asp/pint-ae-payload.builder';
 import { buildPintAeXml } from '../asp/pint-ae-xml.builder';
@@ -635,7 +636,7 @@ export class InvoicesService {
     return {
       endpointId: party.endpointId,
       endpointScheme: party.endpointScheme,
-      legalRegistration: party.legalRegistration,
+      legalRegistration: normalizeLegalRegistration(party.legalRegistration),
       contact: party.contact,
       addressLine3: party.address?.line3,
       ...extraFields(party, [
