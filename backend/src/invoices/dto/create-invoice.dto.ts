@@ -433,13 +433,24 @@ class InvoiceLineDto {
   @Min(0)
   vatRate!: number;
 
-  @ApiProperty({ example: 'S', enum: VAT_CATEGORIES })
+  @ApiProperty({
+    example: 'S',
+    enum: VAT_CATEGORIES,
+    description:
+      'Peppol VAT category. Hub also accepts aliases STANDARD, ZERO-RATED, EXEMPT, REVERSE_CHARGE, OUT_OF_SCOPE.',
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @IsString()
   @IsNotEmpty()
-  @MaxLength(20)
+  @IsIn(VAT_CATEGORIES)
   vatCategory!: string;
 
-  @ApiPropertyOptional({ description: 'VAT exemption reason (required when vatCategory is E, O, AE, K, G)' })
+  @ApiPropertyOptional({
+    description:
+      'VAT exemption reason (required when vatCategory is E, O, AE, K, G)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -453,7 +464,7 @@ class InvoiceLineDto {
 
   @ApiPropertyOptional({
     description:
-      'RCM nature of goods/services code (BTAE-09), e.g. DL8.48.8.2 — recommended when vatCategory is AE',
+      'RCM nature of goods/services code (BTAE-09), e.g. DL8.48.8.2 — required when vatCategory is AE',
   })
   @IsOptional()
   @IsString()
@@ -735,7 +746,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'Credit note reason code (BTAE-03), e.g. DL8.61.1.A — required for credit note types',
+      'Credit note reason code (BTAE-03), e.g. DL8.61.1.A — required for credit note types (or use reasonCode)',
     example: 'DL8.61.1.A',
   })
   @IsOptional()
@@ -745,7 +756,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'IBMS alias for credit note reason code (maps to creditNoteReasonCode / BTAE-03)',
+      'IBMS alias for credit note reason code (maps to creditNoteReasonCode / BTAE-03). Required for credit notes if creditNoteReasonCode is omitted.',
     example: 'DL8.61.1.A',
   })
   @IsOptional()
