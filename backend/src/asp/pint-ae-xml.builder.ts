@@ -426,6 +426,30 @@ function buildCreditNoteReasonXml(reasonCode?: string): string {
   </cac:DiscrepancyResponse>`;
 }
 
+/** IBR-055-AE: volume-discount credit notes (BTAE-03 = VD) must not carry IBG-03. */
+function isVolumeDiscountCreditNote(reasonCode?: string): boolean {
+  return reasonCode?.trim().toUpperCase() === 'VD';
+}
+
+function buildPrecedingInvoiceRefXml(
+  invoice: PintAeInvoice,
+): string {
+  // ibr-055-ae: for reason VD, BillingReference must be absent.
+  if (isVolumeDiscountCreditNote(invoice.creditNoteReasonCode)) {
+    return '';
+  }
+  if (!invoice.precedingInvoiceRef?.id) {
+    return '';
+  }
+  return `
+  <cac:BillingReference>
+    <cac:InvoiceDocumentReference>
+      <cbc:ID>${esc(invoice.precedingInvoiceRef.id)}</cbc:ID>
+      ${opt(invoice.precedingInvoiceRef.issueDate, `<cbc:IssueDate>${esc(invoice.precedingInvoiceRef.issueDate)}</cbc:IssueDate>`)}
+    </cac:InvoiceDocumentReference>
+  </cac:BillingReference>`;
+}
+
 export function buildPintAeXml(invoice: PintAeInvoice): string {
   const typeCode = resolveDocumentTypeCode(invoice.documentType);
   const isCreditNote = isCreditNoteDocument(invoice.documentType);
@@ -449,27 +473,23 @@ export function buildPintAeXml(invoice: PintAeInvoice): string {
 
   <cbc:ID>${esc(invoice.invoiceNumber)}</cbc:ID>
   <cbc:IssueDate>${esc(invoice.issueDate)}</cbc:IssueDate>
-  ${opt(invoice.taxPointDate, `<cbc:TaxPointDate>${esc(invoice.taxPointDate)}</cbc:TaxPointDate>`)}
-  ${opt(invoice.dueDate, `<cbc:DueDate>${esc(invoice.dueDate)}</cbc:DueDate>`)}
+  ${isCreditNote ? opt(invoice.taxPointDate, `<cbc:TaxPointDate>${esc(invoice.taxPointDate)}</cbc:TaxPointDate>`) : ''}
+  ${!isCreditNote ? opt(invoice.dueDate, `<cbc:DueDate>${esc(invoice.dueDate)}</cbc:DueDate>`) : ''}
   <cbc:${typeCodeTag}>${typeCode}</cbc:${typeCodeTag}>
   ${opt(invoice.notes, `<cbc:Note>${esc(invoice.notes)}</cbc:Note>`)}
   ${buildTransactionFlagsXml(invoice.transactionFlags)}
+  ${!isCreditNote ? opt(invoice.taxPointDate, `<cbc:TaxPointDate>${esc(invoice.taxPointDate)}</cbc:TaxPointDate>`) : ''}
   <cbc:DocumentCurrencyCode>${esc(invoice.currencyCode)}</cbc:DocumentCurrencyCode>
   <cbc:TaxCurrencyCode>AED</cbc:TaxCurrencyCode>
   ${opt(invoice.accountingCost, `<cbc:AccountingCost>${esc(invoice.accountingCost)}</cbc:AccountingCost>`)}
 
   ${buildInvoicePeriodXml(invoice.invoicePeriod)}
 
-  ${invoice.orderReference?.purchaseOrderId ? `<cac:OrderReference><cbc:ID>${esc(invoice.orderReference.purchaseOrderId)}</cbc:ID>${opt(invoice.orderReference.salesOrderId, `<cbc:SalesOrderID>${esc(invoice.orderReference.salesOrderId)}</cbc:SalesOrderID>`)}</cac:OrderReference>` : ''}
-
   ${buildCreditNoteReasonXml(invoice.creditNoteReasonCode)}
 
-  ${invoice.precedingInvoiceRef ? `<cac:BillingReference>
-    <cac:InvoiceDocumentReference>
-      <cbc:ID>${esc(invoice.precedingInvoiceRef.id)}</cbc:ID>
-      ${opt(invoice.precedingInvoiceRef.issueDate, `<cbc:IssueDate>${esc(invoice.precedingInvoiceRef.issueDate)}</cbc:IssueDate>`)}
-    </cac:InvoiceDocumentReference>
-  </cac:BillingReference>` : ''}
+  ${invoice.orderReference?.purchaseOrderId ? `<cac:OrderReference><cbc:ID>${esc(invoice.orderReference.purchaseOrderId)}</cbc:ID>${opt(invoice.orderReference.salesOrderId, `<cbc:SalesOrderID>${esc(invoice.orderReference.salesOrderId)}</cbc:SalesOrderID>`)}</cac:OrderReference>` : ''}
+
+  ${buildPrecedingInvoiceRefXml(invoice)}
 
   ${opt(invoice.contractReference, `<cac:ContractDocumentReference><cbc:ID>${esc(invoice.contractReference)}</cbc:ID></cac:ContractDocumentReference>`)}
 

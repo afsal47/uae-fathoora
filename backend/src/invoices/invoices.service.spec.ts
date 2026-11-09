@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 
 describe('InvoicesService', () => {
@@ -64,15 +65,20 @@ describe('InvoicesService', () => {
     const prisma = {
       tenant: {
         findUnique: jest.fn().mockResolvedValue(tenant),
+        update: jest.fn().mockResolvedValue({ invoiceSequence: 1 }),
       },
       integration: {
         findUnique: jest.fn().mockResolvedValue(integration),
       },
       invoice: {
         findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue({
+          invoiceNumber: 'inv-99',
+          issueDate: new Date('2026-08-19'),
+        }),
         create: jest.fn().mockResolvedValue({
           id: 'invoice-1',
-          invoiceNumber: 'INV-1',
+          invoiceNumber: 'inv-1',
           status: 'QUEUED',
           lines: [],
           events: [],
@@ -191,9 +197,44 @@ describe('InvoicesService', () => {
     expect(aspPayload.passthrough.creditNoteReasonCode).toBe('DL8.61.1.A');
     expect(aspPayload.passthrough.reasonCode).toBe('DL8.61.1.A');
     expect(aspPayload.passthrough.precedingInvoiceRef).toEqual({
-      id: 'INV-ORIGINAL-99',
-      issueDate: undefined,
+      id: 'inv-99',
+      issueDate: '2026-08-19',
     });
+  });
+
+  it('rejects credit notes without a reason code', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create({
+        ...createInvoiceDto,
+        documentType: 'CREDIT_NOTE',
+        invoiceNumber: 'CN-2',
+        sourceDocumentId: 'CN-2',
+        idempotencyKey: 'cn-idem-2',
+        againstDCNoteId: 'INV-ORIGINAL-99',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects lines that omit vatExemptionReason for exempt categories', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create({
+        ...createInvoiceDto,
+        idempotencyKey: 'exempt-missing-reason',
+        lines: [
+          {
+            description: 'Exempt fee',
+            quantity: 1,
+            unitPrice: 100,
+            vatRate: 0,
+            vatCategory: 'E',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/vatExemptionReason/);
   });
 
   it('accepts a tax invoice when address and legal registration are omitted', async () => {

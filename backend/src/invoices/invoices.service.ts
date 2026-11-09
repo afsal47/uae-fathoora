@@ -18,6 +18,7 @@ import {
   isZeroChargedVatCategory,
   resolveDocumentTypeFromTaxMix,
 } from './document-type.constants';
+import { validateInvoicePayload } from './invoice-payload.validation';
 import {
   extractStoredSubmissionXml,
   parseAspPassthrough,
@@ -54,6 +55,7 @@ export class InvoicesService {
 
   async create(createInvoiceDto: CreateInvoiceDto) {
     createInvoiceDto = this.normalizeCreditNoteFields(createInvoiceDto);
+    validateInvoicePayload(createInvoiceDto);
 
     const { tenant, integration } = await this.getTenantIntegration(
       createInvoiceDto.tenantCode,
@@ -517,14 +519,32 @@ export class InvoicesService {
       dto.precedingInvoiceRef?.id?.trim() ||
       undefined;
 
-    const requiresPreceding = (
-      PRECEDING_REF_REQUIRED_TYPES as readonly string[]
-    ).includes(dto.documentType);
+    // ibr-055-ae: preceding invoice (IBG-03) is not required when BTAE-03 is VD.
+    const reasonCode = (
+      dto.creditNoteReasonCode?.trim() ||
+      dto.reasonCode?.trim() ||
+      ''
+    ).toUpperCase();
+    const isVolumeDiscount = reasonCode === 'VD';
+
+    const requiresPreceding =
+      !isVolumeDiscount &&
+      (PRECEDING_REF_REQUIRED_TYPES as readonly string[]).includes(
+        dto.documentType,
+      );
+
+    // Volume-discount credit notes must not carry IBG-03 in Peppol XML (ibr-055-ae).
+    if (isVolumeDiscount) {
+      return {
+        ...dto,
+        precedingInvoiceRef: undefined,
+      };
+    }
 
     if (!againstId) {
       if (requiresPreceding) {
         throw new BadRequestException(
-          'Credit/debit notes require againstCreditNoteId (or againstDCNoteId / precedingInvoiceRef.id) referencing an existing hub invoice.',
+          'Credit/debit notes require againstCreditNoteId (or againstDCNoteId / precedingInvoiceRef.id) referencing an existing hub invoice (unless creditNoteReasonCode is VD).',
         );
       }
       return dto;
