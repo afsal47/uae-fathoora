@@ -37,12 +37,12 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
-            <div className={`p-3 rounded-lg ${color}`}>
+          <div key={label} className="bg-white border border-gray-200 p-5 flex items-center gap-4">
+            <div className={`p-3 ${color}`}>
               <Icon size={22} />
             </div>
             <div>
@@ -54,19 +54,19 @@ export default function DashboardPage() {
       </div>
 
       {invoices.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200">
+        <div className="bg-white border border-gray-200">
           <div className="px-5 py-4 border-b border-gray-200">
             <h2 className="font-semibold text-gray-900">Recent Invoices</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                 <tr>
-                  <th className="px-5 py-3 text-left">Invoice #</th>
-                  <th className="px-5 py-3 text-left">Seller</th>
-                  <th className="px-5 py-3 text-left">Buyer</th>
-                  <th className="px-5 py-3 text-right">Amount</th>
-                  <th className="px-5 py-3 text-left">Status</th>
+                  <th className="px-5 py-3 text-left font-semibold">Invoice #</th>
+                  <th className="px-5 py-3 text-left font-semibold">Seller</th>
+                  <th className="px-5 py-3 text-left font-semibold">Buyer</th>
+                  <th className="px-5 py-3 text-right font-semibold">Amount</th>
+                  <th className="px-5 py-3 text-left font-semibold">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -77,7 +77,7 @@ export default function DashboardPage() {
                     <td className="px-5 py-3 text-gray-600">{inv.buyerName}</td>
                     <td className="px-5 py-3 text-right text-gray-900">{inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}</td>
                     <td className="px-5 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium ${
                         inv.status === 'ACCEPTED' ? 'bg-green-100 text-green-700' :
                         inv.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
                         'bg-yellow-100 text-yellow-700'

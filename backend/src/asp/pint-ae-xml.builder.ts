@@ -118,10 +118,10 @@ function buildPartyXml(tag: string, party: PintAeParty): string {
       <cac:PostalAddress>
         ${opt(party.address.line1, `<cbc:StreetName>${esc(party.address.line1)}</cbc:StreetName>`)}
         ${opt(party.address.line2, `<cbc:AdditionalStreetName>${esc(party.address.line2)}</cbc:AdditionalStreetName>`)}
-        ${opt(party.address.line3, `<cac:AddressLine><cbc:Line>${esc(party.address.line3)}</cbc:Line></cac:AddressLine>`)}
         ${opt(party.address.city, `<cbc:CityName>${esc(party.address.city)}</cbc:CityName>`)}
         ${opt(party.address.postalCode, `<cbc:PostalZone>${esc(party.address.postalCode)}</cbc:PostalZone>`)}
         ${opt(party.address.state, `<cbc:CountrySubentity>${esc(party.address.state)}</cbc:CountrySubentity>`)}
+        ${opt(party.address.line3, `<cac:AddressLine><cbc:Line>${esc(party.address.line3)}</cbc:Line></cac:AddressLine>`)}
         <cac:Country>
           <cbc:IdentificationCode>${countryCode(party.address.countryCode)}</cbc:IdentificationCode>
         </cac:Country>
@@ -259,8 +259,8 @@ function buildTaxTotalXml(invoice: PintAeInvoice): string {
         <cac:TaxCategory>
           <cbc:ID>${vatCat(tb.category)}</cbc:ID>
           ${taxPercentXml(tb.category, tb.rate)}
-          ${opt(tb.exemptionReason, `<cbc:TaxExemptionReason>${esc(tb.exemptionReason)}</cbc:TaxExemptionReason>`)}
           ${opt(tb.exemptionReasonCode, `<cbc:TaxExemptionReasonCode>${esc(tb.exemptionReasonCode)}</cbc:TaxExemptionReasonCode>`)}
+          ${opt(tb.exemptionReason, `<cbc:TaxExemptionReason>${esc(tb.exemptionReason)}</cbc:TaxExemptionReason>`)}
           <cac:TaxScheme>
             <cbc:ID>VAT</cbc:ID>
           </cac:TaxScheme>
@@ -322,14 +322,24 @@ function buildInvoiceLinesXml(invoice: PintAeInvoice, isCreditNote: boolean): st
       </cac:TaxTotal>`}
     </cac:ItemPriceExtension>`;
 
+      const commodityClassification =
+        line.rcmNatureCode || line.classificationId
+          ? `<cac:CommodityClassification>
+        ${opt(line.rcmNatureCode, `<cbc:NatureCode>${esc(line.rcmNatureCode)}</cbc:NatureCode>`)}
+        ${line.classificationId ? `<cbc:ItemClassificationCode listID="${esc(line.classificationScheme ?? 'SRV')}">${esc(line.classificationId)}</cbc:ItemClassificationCode>` : ''}
+      </cac:CommodityClassification>`
+          : '';
+
+      // UBL InvoiceLine order: ID → qty → LineExtension → AccountingCost →
+      // InvoicePeriod → OrderLineReference → AllowanceCharge → TaxTotal → Item → Price → ItemPriceExtension
       return `
   <cac:${lineTag}>
     <cbc:ID>${line.lineNumber}</cbc:ID>
-    ${opt(line.orderLineReferenceId, `<cac:OrderLineReference><cbc:LineID>${esc(line.orderLineReferenceId)}</cbc:LineID></cac:OrderLineReference>`)}
-    ${opt(line.accountingCost, `<cbc:AccountingCost>${esc(line.accountingCost)}</cbc:AccountingCost>`)}
     <cbc:${qtyTag} unitCode="${esc(line.unitCode)}">${line.quantity}</cbc:${qtyTag}>
     <cbc:LineExtensionAmount currencyID="${invoice.currencyCode}">${amt(line.netAmount)}</cbc:LineExtensionAmount>
+    ${opt(line.accountingCost, `<cbc:AccountingCost>${esc(line.accountingCost)}</cbc:AccountingCost>`)}
     ${linePeriod}
+    ${opt(line.orderLineReferenceId, `<cac:OrderLineReference><cbc:LineID>${esc(line.orderLineReferenceId)}</cbc:LineID></cac:OrderLineReference>`)}
     ${lineAllowances}
     <cac:TaxTotal>
       <cbc:TaxAmount currencyID="${invoice.currencyCode}">${amt(line.taxAmount)}</cbc:TaxAmount>
@@ -337,19 +347,16 @@ function buildInvoiceLinesXml(invoice: PintAeInvoice, isCreditNote: boolean): st
     <cac:Item>
       <cbc:Description>${esc(line.itemDescription ?? line.description)}</cbc:Description>
       <cbc:Name>${esc(line.description)}</cbc:Name>
-      ${line.classificationId ? `<cac:CommodityClassification>
-        <cbc:ItemClassificationCode listID="${esc(line.classificationScheme ?? 'SRV')}">${esc(line.classificationId)}</cbc:ItemClassificationCode>
-      </cac:CommodityClassification>` : ''}
+      ${commodityClassification}
       <cac:ClassifiedTaxCategory>
         <cbc:ID>${vatCat(line.vatCategory)}</cbc:ID>
         ${taxPercentXml(line.vatCategory, line.vatRate)}
-        ${opt(line.vatExemptionReason, `<cbc:TaxExemptionReason>${esc(line.vatExemptionReason)}</cbc:TaxExemptionReason>`)}
         ${opt(line.vatExemptionReasonCode, `<cbc:TaxExemptionReasonCode>${esc(line.vatExemptionReasonCode)}</cbc:TaxExemptionReasonCode>`)}
+        ${opt(line.vatExemptionReason, `<cbc:TaxExemptionReason>${esc(line.vatExemptionReason)}</cbc:TaxExemptionReason>`)}
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>
       </cac:ClassifiedTaxCategory>
-      ${opt(line.rcmNatureCode, `<cbc:NatureCode>${esc(line.rcmNatureCode)}</cbc:NatureCode>`)}
     </cac:Item>
     <cac:Price>
       <cbc:PriceAmount currencyID="${invoice.currencyCode}">${amt(line.unitPrice)}</cbc:PriceAmount>
@@ -472,6 +479,7 @@ export function buildPintAeXml(invoice: PintAeInvoice): string {
   <cbc:ProfileExecutionID>${profileExecutionId}</cbc:ProfileExecutionID>
 
   <cbc:ID>${esc(invoice.invoiceNumber)}</cbc:ID>
+  <cbc:UUID>${esc(invoice.uuid)}</cbc:UUID>
   <cbc:IssueDate>${esc(invoice.issueDate)}</cbc:IssueDate>
   ${isCreditNote ? opt(invoice.taxPointDate, `<cbc:TaxPointDate>${esc(invoice.taxPointDate)}</cbc:TaxPointDate>`) : ''}
   ${!isCreditNote ? opt(invoice.dueDate, `<cbc:DueDate>${esc(invoice.dueDate)}</cbc:DueDate>`) : ''}

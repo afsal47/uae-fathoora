@@ -4,7 +4,7 @@ import Modal from '../components/Modal';
 import { tenantApi, type Tenant } from '../lib/api';
 
 const inputClass =
-  'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
+  'w-full border border-gray-300 px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
 
 /** Browsers treat email + password as a login and ignore autocomplete="off". */
 function unlockOnFocus(e: React.FocusEvent<HTMLInputElement>) {
@@ -188,7 +188,7 @@ export default function TenantsPage() {
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
         >
           <Plus size={16} />
           New Tenant
@@ -203,7 +203,7 @@ export default function TenantsPage() {
       >
         <form onSubmit={handleCreate} autoComplete="off" className="relative">
           <AutofillTrap />
-          {error && !editingTenant && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+          {error && !editingTenant && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
             <Field label="Tenant code *">
               <input name="code" required placeholder="TENANT_CODE" className={inputClass} />
@@ -241,7 +241,7 @@ export default function TenantsPage() {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               Create Tenant
             </button>
@@ -263,13 +263,13 @@ export default function TenantsPage() {
           className="relative"
         >
           <AutofillTrap />
-          {error && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+          {error && <p className="text-red-600 text-sm mb-4 bg-red-50 p-3">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
             <Field label="Tenant code">
               <input
                 value={editingTenant.code}
                 disabled
-                className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2.5 text-sm text-gray-500 cursor-not-allowed"
+                className="w-full border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 cursor-not-allowed"
               />
             </Field>
             <Field label="Company Name *">
@@ -312,7 +312,7 @@ export default function TenantsPage() {
                   name="isActive"
                   type="checkbox"
                   defaultChecked={editingTenant.isActive}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 Active
               </label>
@@ -329,7 +329,7 @@ export default function TenantsPage() {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               Save Changes
             </button>
@@ -338,7 +338,7 @@ export default function TenantsPage() {
         )}
       </Modal>
 
-      <div className="bg-white rounded-xl border border-gray-200">
+      <div className="bg-white border border-gray-200">
         {tenants.length === 0 ? (
           <div className="p-12 text-center text-gray-400">No tenants yet. Create one to get started.</div>
         ) : (
@@ -346,50 +346,50 @@ export default function TenantsPage() {
             <table className="w-max min-w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs tracking-wide">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Tenant code</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Company name</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">TRN</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">ASP URL</th>
-                  <th className="px-4 py-3 text-center font-semibold whitespace-nowrap">Integrations</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">Tenant code</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">Company name</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">TRN</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">ASP</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">ASP URL</th>
+                  <th className="px-5 py-3 text-center font-semibold whitespace-nowrap">Integrations</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">Status</th>
+                  <th className="px-5 py-3 text-left font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {tenants.map((t) => (
                   <tr key={t.id} className="hover:bg-gray-50 align-middle">
-                    <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900 whitespace-nowrap">
+                    <td className="px-5 py-3 font-mono text-sm font-medium text-gray-900 whitespace-nowrap">
                       {t.code}
                     </td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{t.name}</td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
+                    <td className="px-5 py-3 text-gray-700 whitespace-nowrap">{t.name}</td>
+                    <td className="px-5 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
                       {t.trn ?? '—'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700">
                         {t.aspProvider}
                       </span>
                     </td>
                     <td
-                      className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap max-w-[240px]"
+                      className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap max-w-[240px]"
                       title={t.aspBaseUrl ?? undefined}
                     >
                       <span className="block truncate">{t.aspBaseUrl ?? '—'}</span>
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap tabular-nums">
+                    <td className="px-5 py-3 text-center text-gray-600 whitespace-nowrap tabular-nums">
                       {t.integrations?.length ?? 0}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-3 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${
                           t.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}
                       >
                         {t.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-3 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => openEdit(t)}

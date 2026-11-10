@@ -4,7 +4,10 @@ import {
   type CreateInvoiceDto,
   type VatCategory,
 } from './dto/create-invoice.dto';
-import { CREDIT_NOTE_DOCUMENT_TYPES } from './document-type.constants';
+import {
+  CREDIT_NOTE_DOCUMENT_TYPES,
+  CREDIT_NOTE_REASON_CODES,
+} from './document-type.constants';
 
 /** Source-system aliases normalized to Peppol VAT category IDs. */
 const VAT_CATEGORY_ALIASES: Record<string, VatCategory> = {
@@ -88,5 +91,19 @@ export function validateInvoicePayload(dto: CreateInvoiceDto): void {
         'creditNoteReasonCode (or reasonCode) is required for credit note types.',
       );
     }
+    // ibr-001-ae: BTAE-03 must be from the official CreditReason code list
+    const canonical =
+      reason.toUpperCase() === 'VD'
+        ? 'VD'
+        : (CREDIT_NOTE_REASON_CODES as readonly string[]).find(
+            (code) => code.toUpperCase() === reason.toUpperCase(),
+          );
+    if (!canonical) {
+      throw new BadRequestException(
+        `creditNoteReasonCode "${reason}" is invalid (ibr-001-ae). Allowed: ${CREDIT_NOTE_REASON_CODES.join(', ')}.`,
+      );
+    }
+    if (dto.creditNoteReasonCode) dto.creditNoteReasonCode = canonical;
+    if (dto.reasonCode) dto.reasonCode = canonical;
   }
 }

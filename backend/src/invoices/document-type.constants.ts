@@ -44,6 +44,21 @@ export const PRECEDING_REF_REQUIRED_TYPES: readonly DocumentType[] = [
   'COMMERCIAL_CREDIT_NOTE',
 ] as const;
 
+/**
+ * PINT AE CreditReason code list (BTAE-03 / ibr-001-ae).
+ * @see https://docs.peppol.eu/poac/ae/pint-ae/trn-creditnote/codelist/CreditReason/
+ */
+export const CREDIT_NOTE_REASON_CODES = [
+  'DL8.61.1.A',
+  'DL8.61.1.B',
+  'DL8.61.1.C',
+  'DL8.61.1.D',
+  'DL8.61.1.E',
+  'VD',
+] as const;
+
+export type CreditNoteReasonCode = (typeof CREDIT_NOTE_REASON_CODES)[number];
+
 export const BILLING_CUSTOMIZATION_ID = 'urn:peppol:pint:billing-1@ae-1';
 export const BILLING_PROFILE_ID = 'urn:peppol:bis:billing';
 export const SELFBILLING_CUSTOMIZATION_ID = 'urn:peppol:pint:selfbilling-1@ae-1';

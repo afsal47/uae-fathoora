@@ -107,3 +107,34 @@ export function mergeSubmissionIntoAspPayload(
   };
   return JSON.stringify(envelope);
 }
+
+/**
+ * Merge fields into the durable passthrough while keeping any prior
+ * lastSubmission audit block intact (used to persist BTAE-07 UUID).
+ */
+export function mergeFieldsIntoAspPassthrough(
+  existingRaw: string | null | undefined,
+  fields: Record<string, unknown>,
+): string {
+  let lastSubmission: AspPayloadEnvelopeV2['lastSubmission'];
+  if (existingRaw) {
+    try {
+      const parsed = JSON.parse(existingRaw) as AspPayloadEnvelopeV2;
+      if (parsed?.version === 2 && parsed.lastSubmission) {
+        lastSubmission = parsed.lastSubmission;
+      }
+    } catch {
+      /* ignore malformed legacy payloads */
+    }
+  }
+
+  const envelope: AspPayloadEnvelopeV2 = {
+    version: 2,
+    passthrough: {
+      ...(parseAspPassthrough(existingRaw) ?? {}),
+      ...fields,
+    },
+    ...(lastSubmission ? { lastSubmission } : {}),
+  };
+  return JSON.stringify(envelope);
+}

@@ -47,7 +47,7 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative flex w-full ${size === 'md' ? 'max-w-lg' : 'max-w-3xl'} max-h-[min(90vh,840px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl`}
+        className={`relative flex w-full ${size === 'md' ? 'max-w-lg' : 'max-w-3xl'} max-h-[min(90vh,840px)] flex-col overflow-hidden border border-gray-200 bg-white shadow-xl`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
           <div className="min-w-0">
@@ -59,7 +59,7 @@ export default function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Close"
           >
             <X size={18} />

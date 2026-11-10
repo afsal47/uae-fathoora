@@ -56,7 +56,7 @@ function ObjectGrid({
               ) : value.every((item) => item && typeof item === 'object' && !Array.isArray(item)) ? (
                 <RecordList items={value as Record<string, unknown>[]} showEmpty={showEmpty} />
               ) : (
-                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
                   {JSON.stringify(value, null, 2)}
                 </pre>
               )}
@@ -91,7 +91,7 @@ function RecordList({
   return (
     <div className="space-y-2">
       {items.map((item, index) => (
-        <div key={index} className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+        <div key={index} className="border border-gray-100 bg-gray-50 px-5 py-3">
           <ObjectGrid data={item} columns="grid-cols-2 sm:grid-cols-3" showEmpty={showEmpty} />
         </div>
       ))}
@@ -140,7 +140,7 @@ function PartyBlock({
   const more = restFields(extras, SHOWN_PARTY_KEYS);
 
   return (
-    <div className="h-full rounded-lg border border-gray-100 bg-gray-50 p-4">
+    <div className="h-full border border-gray-100 bg-gray-50 p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</p>
       <p className="mt-1 text-sm font-semibold text-gray-900">{name}</p>
       <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -291,13 +291,13 @@ function AspResponseFields({ raw }: { raw?: string | null }) {
       );
     }
     return (
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
         {JSON.stringify(parsed, null, 2)}
       </pre>
     );
   } catch {
     return (
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 font-mono text-xs text-gray-800">
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
         {raw}
       </pre>
     );
@@ -341,12 +341,12 @@ function InvoiceXml({ invoiceId }: { invoiceId: number }) {
                   window.setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              className="border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
             >
               {copied ? 'Copied' : 'Copy XML'}
             </button>
           </div>
-          <pre className="max-h-96 overflow-auto whitespace-pre rounded-lg bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100">
+          <pre className="max-h-96 overflow-auto whitespace-pre bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100">
             {xml}
           </pre>
         </div>
@@ -425,7 +425,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
         againstDCNoteId ||
         precedingHubInvoiceId) && (
         <Section title="Credit / Debit Note">
-          <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 rounded-lg border border-amber-100 bg-amber-50 p-4 md:grid-cols-4">
+          <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 border border-amber-100 bg-amber-50 p-4 md:grid-cols-4">
             <Field label="Reason Code" value={creditReasonCode || '—'} />
             <Field
               label="Against credit note ID"
@@ -748,11 +748,11 @@ export default function InvoicesPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
 
-      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+      <div className="bg-white border border-gray-200 px-5 py-4">
         <label htmlFor="invoice-tenant" className="block text-sm font-medium text-gray-700 mb-1.5">
           Tenant code
         </label>
-        <div className="relative w-full max-w-2xl">
+        <div className="relative w-full">
           <select
             id="invoice-tenant"
             value={tenantId}
@@ -760,7 +760,7 @@ export default function InvoicesPage() {
               setTenantId(e.target.value);
               setExpandedId(null);
             }}
-            className="w-full appearance-none border border-gray-300 rounded-lg pl-3 pr-10 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="w-full appearance-none border border-gray-300 pl-3 pr-10 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
           >
             <option value="">All tenants</option>
             {tenants.map((tenant) => (
@@ -782,13 +782,13 @@ export default function InvoicesPage() {
       )}
 
       {visible.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
+        <div className="bg-white border border-gray-200 p-12 text-center text-gray-400">
           {tenantId ? 'No invoices for this tenant code.' : 'No invoices yet.'}
         </div>
       ) : (
         <div className="space-y-3">
           {visible.map((inv) => (
-            <div key={inv.id} className="bg-white rounded-xl border border-gray-200">
+            <div key={inv.id} className="bg-white border border-gray-200">
               <div
                 role="button"
                 tabIndex={0}
@@ -800,7 +800,7 @@ export default function InvoicesPage() {
                     setExpandedId(expandedId === inv.id ? null : inv.id);
                   }
                 }}
-                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
                   <span className="font-mono text-xs text-gray-500 whitespace-nowrap">
@@ -822,7 +822,7 @@ export default function InvoicesPage() {
                       e.stopPropagation();
                       void requeue(inv.id);
                     }}
-                    className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="inline-flex shrink-0 items-center justify-center bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
                   >
                     {requeueId === inv.id ? 'Requeueing…' : 'Requeue'}
                   </button>

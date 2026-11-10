@@ -746,7 +746,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'Credit note reason code (BTAE-03), e.g. DL8.61.1.A — required for credit note types (or use reasonCode)',
+      'Credit note reason code (BTAE-03 / ibr-001-ae). Allowed: DL8.61.1.A–E, VD. Required for credit note types (or use reasonCode).',
     example: 'DL8.61.1.A',
   })
   @IsOptional()
@@ -756,7 +756,7 @@ export class CreateInvoiceDto {
 
   @ApiPropertyOptional({
     description:
-      'IBMS alias for credit note reason code (maps to creditNoteReasonCode / BTAE-03). Required for credit notes if creditNoteReasonCode is omitted.',
+      'IBMS alias for credit note reason code (maps to creditNoteReasonCode / BTAE-03). Allowed: DL8.61.1.A–E, VD. Required for credit notes if creditNoteReasonCode is omitted.',
     example: 'DL8.61.1.A',
   })
   @IsOptional()
@@ -797,6 +797,18 @@ export class CreateInvoiceDto {
   @IsString()
   @Matches(/^[01]{8}$/)
   profileExecutionId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'PINT AE BTAE-07 document UUID (cbc:UUID). Generated and persisted by the Hub; do not invent a new value on retry.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  )
+  documentUuid?: string;
 
   @ApiPropertyOptional({
     description:
