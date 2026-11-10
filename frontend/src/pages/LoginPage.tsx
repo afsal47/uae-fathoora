@@ -58,27 +58,29 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6 sm:p-10">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-blue-600 text-white">
             <ShieldCheck size={20} />
           </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">UAE-FATHOORA</p>
-            <p className="text-xs text-slate-500">Administration</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight text-slate-900">UAE-FATHOORA</p>
+            <p className="mt-0.5 text-xs leading-tight text-slate-500">Administration</p>
           </div>
         </div>
 
-        <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Use the access key issued for this hub.
-        </p>
+        <div className="mt-8">
+          <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Use the access key issued for this hub.
+          </p>
+        </div>
 
         {checking ? (
           <p className="mt-8 text-sm text-slate-400">Checking your session…</p>
         ) : (
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             {error && (
-              <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
+              <p className="text-sm text-red-700 bg-red-50 border border-red-100 px-3 py-2.5">
                 {error}
               </p>
             )}
@@ -94,7 +96,7 @@ export default function LoginPage() {
                   onChange={(e) => setKey(e.target.value)}
                   autoComplete="current-password"
                   autoFocus
-                  className="w-full border border-slate-300 bg-white rounded-lg pl-3 pr-11 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full border border-slate-300 bg-white pl-3 pr-11 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
                 <button
                   type="button"
@@ -109,7 +111,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+              className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
             >
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>

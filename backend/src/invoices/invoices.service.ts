@@ -7,6 +7,7 @@ import { Integration, Invoice, InvoiceLine, Prisma, Tenant } from '@prisma/clien
 import {
   buildPintAePayload,
   normalizeLegalRegistration,
+  resolveDocumentUuid,
   toPeppolInvoiceNumber,
 } from '../asp/pint-ae-payload.builder';
 import { buildPintAeXml } from '../asp/pint-ae-xml.builder';
@@ -187,9 +188,11 @@ export class InvoicesService {
         taxAmount: new Prisma.Decimal(taxAmount),
         totalAmount: new Prisma.Decimal(totalAmount),
         notes: createInvoiceDto.notes,
-        aspPayload: wrapAspPassthrough(
-          this.extractPassthroughFields(dtoForValidation),
-        ),
+        aspPayload: wrapAspPassthrough({
+          ...this.extractPassthroughFields(dtoForValidation),
+          // BTAE-07: mint once at create so requeue reuses the same cbc:UUID
+          documentUuid: resolveDocumentUuid(dtoForValidation.documentUuid),
+        }),
         lines: {
           create: computedLines,
         },
@@ -612,6 +615,7 @@ export class InvoicesService {
       allowanceCharges: dto.allowanceCharges,
       transactionFlags: dto.transactionFlags,
       profileExecutionId: dto.profileExecutionId,
+      documentUuid: dto.documentUuid,
       principalTrn: dto.principalTrn,
       exchangeRate: dto.VatFxRateAED ?? dto.exchangeRate,
       VatFxRateAED: dto.VatFxRateAED ?? dto.exchangeRate,

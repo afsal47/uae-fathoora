@@ -22,6 +22,11 @@ import {
   InvoiceStatus,
 } from './invoice.constants';
 import {
+  isDocumentUuid,
+  resolveDocumentUuid,
+} from '../asp/pint-ae-payload.builder';
+import {
+  mergeFieldsIntoAspPassthrough,
   mergeSubmissionIntoAspPayload,
   parseAspPassthrough,
 } from './asp-payload.storage';
@@ -112,16 +117,32 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
+    // Hoisted so a failed submit still persists any newly minted BTAE-07 UUID.
+    let aspPayload = invoice.aspPayload;
+    let passthroughDto: CreateInvoiceDto | undefined;
+
     try {
       const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
 
-      let passthroughDto: CreateInvoiceDto | undefined;
-      if (invoice.aspPayload) {
+      if (aspPayload) {
         try {
-          const passthrough = parseAspPassthrough(invoice.aspPayload);
+          const passthrough = parseAspPassthrough(aspPayload);
           if (passthrough) {
+            // BTAE-07: ensure a durable UUID exists before XML build / retry
+            const documentUuid = resolveDocumentUuid(
+              isDocumentUuid(passthrough.documentUuid)
+                ? String(passthrough.documentUuid)
+                : undefined,
+            );
+            if (passthrough.documentUuid !== documentUuid) {
+              aspPayload = mergeFieldsIntoAspPassthrough(aspPayload, {
+                documentUuid,
+              });
+            }
+
             passthroughDto = {
               ...passthrough,
+              documentUuid,
               seller: {
                 name: invoice.sellerName,
                 ...(passthrough.seller as object),
@@ -135,6 +156,15 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         } catch {
           /* ignore parse errors for legacy records */
         }
+      }
+
+      if (!passthroughDto?.documentUuid) {
+        const documentUuid = resolveDocumentUuid(passthroughDto?.documentUuid);
+        aspPayload = mergeFieldsIntoAspPassthrough(aspPayload, { documentUuid });
+        passthroughDto = {
+          ...(passthroughDto ?? {}),
+          documentUuid,
+        } as CreateInvoiceDto;
       }
 
       const result = await provider.submitInvoice({
@@ -151,9 +181,9 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
           status: result.status,
           aspMessageId: result.aspMessageId,
           aspReferenceId: result.aspReferenceId,
-          // Keep source pass-through; attach submission under lastSubmission
+          // Keep source pass-through (incl. documentUuid); attach submission
           aspPayload: mergeSubmissionIntoAspPayload(
-            invoice.aspPayload,
+            aspPayload,
             result.payload,
           ),
           aspResponse: JSON.stringify(result.response),
@@ -200,6 +230,10 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
           status: INVOICE_STATUS.FAILED,
           lastSubmissionError: message.slice(0, 2000),
           aspResponse,
+          // Persist minted documentUuid so retries reuse the same cbc:UUID
+          ...(aspPayload && aspPayload !== invoice.aspPayload
+            ? { aspPayload }
+            : {}),
           events: {
             create: {
               type: EVENT_TYPE.SUBMISSION_FAILED,
