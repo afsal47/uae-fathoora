@@ -87,12 +87,6 @@ export class UpdateTenantDto {
   @MaxLength(500)
   aspApiKey?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  aspWebhookToken?: string;
-
   @ApiPropertyOptional({ description: 'Activate or deactivate tenant' })
   @IsOptional()
   @IsBoolean()

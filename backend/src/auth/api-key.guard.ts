@@ -59,8 +59,6 @@ export class ApiKeyGuard implements CanActivate {
     (request as any).integration = {
       ...integration,
       apiSecret: this.secrets.decrypt(integration.apiSecret) ?? integration.apiSecret,
-      webhookSecret:
-        this.secrets.decrypt(integration.webhookSecret) ?? integration.webhookSecret,
     };
 
     return true;

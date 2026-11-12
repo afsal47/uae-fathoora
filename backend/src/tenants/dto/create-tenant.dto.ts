@@ -96,10 +96,4 @@ export class CreateTenantDto {
   @IsString()
   @MaxLength(500)
   aspApiKey?: string;
-
-  @ApiPropertyOptional({ description: 'Token ASP sends in webhook header for verification' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  aspWebhookToken?: string;
 }

@@ -58,9 +58,19 @@ export class AdminInvoicesController {
     return this.invoicesService.getStatus(id);
   }
 
-  @Post(':id/requeue')
-  @ApiOperation({ summary: 'Requeue a failed invoice for ASP submission' })
-  requeue(@Param('id', ParseIntPipe) id: number) {
-    return this.invoiceProcessingService.requeueInvoice(id);
+  @Post(':id/sync-status')
+  @ApiOperation({
+    summary: 'Poll the invoice tenant ASP for document status and update the hub',
+  })
+  syncStatus(@Param('id', ParseIntPipe) id: number) {
+    return this.invoiceProcessingService.syncAspStatus(id);
+  }
+
+  @Post(':id/asp-retry')
+  @ApiOperation({
+    summary: 'Retry ASP Peppol TDD for this invoice trackingId',
+  })
+  aspRetry(@Param('id', ParseIntPipe) id: number) {
+    return this.invoiceProcessingService.retryAsp(id);
   }
 }

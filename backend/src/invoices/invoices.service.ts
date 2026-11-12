@@ -263,28 +263,32 @@ export class InvoicesService {
     return this.withSourcePayload(invoice);
   }
 
+  private readonly statusSelect = {
+    id: true,
+    invoiceNumber: true,
+    sourceDocumentId: true,
+    sourceSystemDCNoteId: true,
+    status: true,
+    submissionAttempts: true,
+    submittedAt: true,
+    acceptedAt: true,
+    rejectedAt: true,
+    cancelledAt: true,
+    lastSubmissionAt: true,
+    lastSubmissionError: true,
+    aspMessageId: true,
+    aspReferenceId: true,
+    rejectionReason: true,
+    events: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 10,
+    },
+  };
+
   async getStatus(id: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        status: true,
-        submissionAttempts: true,
-        submittedAt: true,
-        acceptedAt: true,
-        rejectedAt: true,
-        cancelledAt: true,
-        lastSubmissionAt: true,
-        lastSubmissionError: true,
-        aspMessageId: true,
-        aspReferenceId: true,
-        rejectionReason: true,
-        events: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
+      select: this.statusSelect,
     });
 
     if (!invoice) {
@@ -403,29 +407,53 @@ export class InvoicesService {
   async getStatusForIntegration(integrationId: string, id: number) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, integrationId },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        status: true,
-        submissionAttempts: true,
-        submittedAt: true,
-        acceptedAt: true,
-        rejectedAt: true,
-        cancelledAt: true,
-        lastSubmissionAt: true,
-        lastSubmissionError: true,
-        aspMessageId: true,
-        aspReferenceId: true,
-        rejectionReason: true,
-        events: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
+      select: this.statusSelect,
     });
 
     if (!invoice) {
       throw new NotFoundException(`Invoice ${id} was not found.`);
+    }
+
+    return invoice;
+  }
+
+  /**
+   * Status lookup for source systems (IBMS) by Hub id and/or source keys.
+   * Prefer hubInvoiceId when available; otherwise use sourceDocumentId / DCNote id.
+   */
+  async trackStatusForIntegration(
+    integrationId: string,
+    query: {
+      hubInvoiceId?: number;
+      sourceDocumentId?: string;
+      sourceSystemDCNoteId?: string;
+    },
+  ) {
+    const hubInvoiceId = query.hubInvoiceId;
+    const sourceDocumentId = query.sourceDocumentId?.trim();
+    const sourceSystemDCNoteId = query.sourceSystemDCNoteId?.trim();
+
+    if (!hubInvoiceId && !sourceDocumentId && !sourceSystemDCNoteId) {
+      throw new BadRequestException(
+        'Provide hubInvoiceId, sourceDocumentId, or sourceSystemDCNoteId.',
+      );
+    }
+
+    const invoice = await this.prisma.invoice.findFirst({
+      where: {
+        integrationId,
+        ...(hubInvoiceId ? { id: hubInvoiceId } : {}),
+        ...(sourceDocumentId ? { sourceDocumentId } : {}),
+        ...(sourceSystemDCNoteId ? { sourceSystemDCNoteId } : {}),
+      },
+      select: this.statusSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(
+        'No invoice found for the given status tracking filters.',
+      );
     }
 
     return invoice;

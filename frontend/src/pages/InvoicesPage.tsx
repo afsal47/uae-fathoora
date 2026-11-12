@@ -1,16 +1,34 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import axios from 'axios';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Eye, RefreshCw } from 'lucide-react';
+import Modal from '../components/Modal';
+import SelectMenu from '../components/SelectMenu';
 import StatusBadge from '../components/StatusBadge';
 import { invoiceApi, tenantApi, type Invoice, type InvoiceSourcePayload, type Tenant } from '../lib/api';
+
+const PAGE_SIZE = 25;
+
+function trackingIdOf(inv: Invoice) {
+  return inv.aspMessageId?.trim() || inv.aspReferenceId?.trim() || '';
+}
+
+function apiErrorMessage(error: unknown) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string | string[] } } }).response;
+    const message = response?.data?.message;
+    if (Array.isArray(message)) return message.join(', ');
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'Request failed.';
+}
 
 function Field({ label, value }: { label: string; value?: string | number | null | boolean }) {
   if (value === undefined || value === null || value === '') return null;
   const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value);
   return (
     <div className="min-w-0">
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="mt-1 text-sm leading-snug text-gray-900 break-words">{display}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">{label}</p>
+      <p className="mt-1 text-sm leading-snug text-[var(--color-ink)] break-words">{display}</p>
     </div>
   );
 }
@@ -18,7 +36,7 @@ function Field({ label, value }: { label: string; value?: string | number | null
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-6 first:mt-5">
-      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</h3>
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink-subtle)]">{title}</h3>
       {children}
     </section>
   );
@@ -50,13 +68,13 @@ function ObjectGrid({
         if (Array.isArray(value)) {
           return (
             <div key={key} className="col-span-full space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{labelize(key)}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">{labelize(key)}</p>
               {value.length === 0 ? (
-                <p className="text-sm text-gray-400">—</p>
+                <p className="text-sm text-[var(--color-ink-subtle)]">—</p>
               ) : value.every((item) => item && typeof item === 'object' && !Array.isArray(item)) ? (
                 <RecordList items={value as Record<string, unknown>[]} showEmpty={showEmpty} />
               ) : (
-                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words border border-[var(--color-line-soft)] bg-slate-50 p-3 font-mono text-xs text-[var(--color-ink)]">
                   {JSON.stringify(value, null, 2)}
                 </pre>
               )}
@@ -66,7 +84,7 @@ function ObjectGrid({
         if (value && typeof value === 'object') {
           return (
             <div key={key} className="col-span-full space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{labelize(key)}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">{labelize(key)}</p>
               <ObjectGrid data={value as Record<string, unknown>} columns={columns} showEmpty={showEmpty} />
             </div>
           );
@@ -91,7 +109,7 @@ function RecordList({
   return (
     <div className="space-y-2">
       {items.map((item, index) => (
-        <div key={index} className="border border-gray-100 bg-gray-50 px-5 py-3">
+        <div key={index} className="border border-[var(--color-line-soft)] bg-slate-50 px-5 py-3">
           <ObjectGrid data={item} columns="grid-cols-2 sm:grid-cols-3" showEmpty={showEmpty} />
         </div>
       ))}
@@ -140,9 +158,9 @@ function PartyBlock({
   const more = restFields(extras, SHOWN_PARTY_KEYS);
 
   return (
-    <div className="h-full border border-gray-100 bg-gray-50 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</p>
-      <p className="mt-1 text-sm font-semibold text-gray-900">{name}</p>
+    <div className="h-full border border-[var(--color-line)] bg-slate-50 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink-subtle)]">{title}</p>
+      <p className="mt-1 text-sm font-semibold text-[var(--color-ink)]">{name}</p>
       <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
         <Field label="TRN" value={trn} />
         <Field
@@ -161,19 +179,19 @@ function PartyBlock({
         <Field label="Endpoint Scheme" value={extras?.endpointScheme} />
       </div>
       {registration.length > 0 && (
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Legal Registration</p>
+        <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Legal Registration</p>
           <ObjectGrid data={extras?.legalRegistration} columns="grid-cols-2" />
         </div>
       )}
       {contact.length > 0 && (
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Contact</p>
+        <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Contact</p>
           <ObjectGrid data={extras?.contact} columns="grid-cols-2" />
         </div>
       )}
       {more && (
-        <div className="mt-4 border-t border-gray-200 pt-4">
+        <div className="mt-4 border-t border-[var(--color-line)] pt-4">
           <ObjectGrid data={more} columns="grid-cols-2" />
         </div>
       )}
@@ -276,7 +294,7 @@ const SHOWN_LINE_KEYS = new Set([
 
 function AspResponseFields({ raw }: { raw?: string | null }) {
   if (!raw) {
-    return <p className="text-sm text-gray-400">No ASP response stored for this invoice.</p>;
+    return <p className="text-sm text-[var(--color-ink-subtle)]">No ASP response stored for this invoice.</p>;
   }
 
   try {
@@ -291,13 +309,13 @@ function AspResponseFields({ raw }: { raw?: string | null }) {
       );
     }
     return (
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words border border-[var(--color-line-soft)] bg-slate-50 p-3 font-mono text-xs text-[var(--color-ink)]">
         {JSON.stringify(parsed, null, 2)}
       </pre>
     );
   } catch {
     return (
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words bg-gray-50 p-3 font-mono text-xs text-gray-800">
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words border border-[var(--color-line-soft)] bg-slate-50 p-3 font-mono text-xs text-[var(--color-ink)]">
         {raw}
       </pre>
     );
@@ -328,8 +346,8 @@ function InvoiceXml({ invoiceId }: { invoiceId: number }) {
 
   return (
     <Section title="Peppol XML">
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!error && xml === null && <p className="text-sm text-gray-400">Loading XML…</p>}
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      {!error && xml === null && <p className="text-sm text-[var(--color-ink-subtle)]">Loading XML…</p>}
       {xml && (
         <div>
           <div className="mb-2 flex justify-end">
@@ -341,12 +359,12 @@ function InvoiceXml({ invoiceId }: { invoiceId: number }) {
                   window.setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              className="btn btn-secondary btn-sm"
             >
               {copied ? 'Copied' : 'Copy XML'}
             </button>
           </div>
-          <pre className="max-h-96 overflow-auto whitespace-pre bg-gray-950 p-4 font-mono text-xs leading-relaxed text-gray-100">
+          <pre className="max-h-96 overflow-auto whitespace-pre border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-100">
             {xml}
           </pre>
         </div>
@@ -365,7 +383,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
   const precedingHubInvoiceId = src?.precedingInvoiceRef?.id;
 
   return (
-    <div className="border-t border-gray-100 px-5 pb-6">
+    <div className="bg-white">
       <Section title="Document">
         <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 md:grid-cols-4">
           <Field label="Document Type" value={formatDocumentType(inv.documentType)} />
@@ -405,13 +423,13 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           )}
           {inv.rejectionReason && (
             <div className="col-span-2">
-              <p className="text-gray-400 text-xs">Rejection Reason</p>
-              <p className="text-red-600">{inv.rejectionReason}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Rejection Reason</p>
+              <p className="mt-1 text-sm text-red-700">{inv.rejectionReason}</p>
             </div>
           )}
           {inv.lastSubmissionError && (
             <div className="col-span-2 md:col-span-4">
-              <p className="text-gray-400 text-xs">ASP error</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">ASP error</p>
               <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
                 {inv.lastSubmissionError}
               </pre>
@@ -425,7 +443,7 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
         againstDCNoteId ||
         precedingHubInvoiceId) && (
         <Section title="Credit / Debit Note">
-          <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 border border-amber-100 bg-amber-50 p-4 md:grid-cols-4">
+          <div className="grid grid-cols-2 items-start gap-x-8 gap-y-4 border border-amber-200 bg-amber-50 p-4 md:grid-cols-4">
             <Field label="Reason Code" value={creditReasonCode || '—'} />
             <Field
               label="Against credit note ID"
@@ -479,13 +497,13 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           <div className="space-y-5">
             {src.paymentMeans && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Payment Means</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Payment Means</p>
                 <ObjectGrid data={src.paymentMeans} columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
               </div>
             )}
             {src.paymentTerms && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Payment Terms</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Payment Terms</p>
                 <ObjectGrid data={src.paymentTerms} />
               </div>
             )}
@@ -498,31 +516,31 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           <div className="space-y-5">
             {src.delivery && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Delivery</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Delivery</p>
                 <ObjectGrid data={src.delivery} />
               </div>
             )}
             {src.invoicePeriod && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Invoice Period</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Invoice Period</p>
                 <ObjectGrid data={src.invoicePeriod} />
               </div>
             )}
             {src.orderReference && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Order Reference</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Order Reference</p>
                 <ObjectGrid data={src.orderReference} />
               </div>
             )}
             {src.precedingInvoiceRef && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Preceding Invoice</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Preceding Invoice</p>
                 <ObjectGrid data={src.precedingInvoiceRef} />
               </div>
             )}
             {src.references && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">References</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">References</p>
                 <ObjectGrid data={src.references} />
               </div>
             )}
@@ -535,13 +553,13 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
           <div className="space-y-5">
             {src.transactionFlags && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">Transaction Flags</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">Transaction Flags</p>
                 <ObjectGrid data={src.transactionFlags} />
               </div>
             )}
             {src.allowanceCharges && src.allowanceCharges.length > 0 && (
               <div>
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-subtle)]">
                   Document Allowances / Charges
                 </p>
                 <RecordList items={src.allowanceCharges} />
@@ -553,31 +571,31 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 
       {inv.lines.length > 0 && (
         <Section title="Line Items">
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500">
+          <div className="overflow-x-auto border border-[var(--color-line)]">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Description</th>
-                <th className="px-3 py-2 text-left">VAT Cat</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 text-right">Unit Price (excl.)</th>
-                <th className="px-3 py-2 text-right">VAT %</th>
-                <th className="px-3 py-2 text-right">Tax</th>
-                <th className="px-3 py-2 text-right">Total (incl.)</th>
+                <th>#</th>
+                <th>Description</th>
+                <th>VAT Cat</th>
+                <th className="!text-right">Qty</th>
+                <th className="!text-right">Unit Price (excl.)</th>
+                <th className="!text-right">VAT %</th>
+                <th className="!text-right">Tax</th>
+                <th className="!text-right">Total (incl.)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {inv.lines.map((line, idx) => {
                 const extra = lineExtras[idx];
                 const moreLineFields = restFields(extra, SHOWN_LINE_KEYS);
                 return (
                   <tr key={line.id}>
-                    <td className="px-3 py-2 text-gray-500 align-top">{line.lineNumber}</td>
-                    <td className="px-3 py-2 text-gray-900 align-top">
+                    <td className="align-top !whitespace-normal text-[var(--color-ink-subtle)]">{line.lineNumber}</td>
+                    <td className="align-top !whitespace-normal cell-strong">
                       <div>{line.description}</div>
                       {extra && (
-                        <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+                        <div className="mt-1 space-y-0.5 text-[11px] font-normal text-[var(--color-ink-subtle)]">
                           {extra.itemDescription && <div>Item desc: {extra.itemDescription}</div>}
                           {extra.unitCode && <div>Unit: {extra.unitCode}</div>}
                           {extra.vatExemptionReason && (
@@ -618,45 +636,35 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-700 align-top">{line.vatCategory}</td>
-                    <td className="px-3 py-2 text-right text-gray-700 align-top">
-                      {Number(line.quantity)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-700 align-top">
-                      {Number(line.unitPrice).toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-700 align-top">
-                      {Number(line.vatRate)}%
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-700 align-top">
-                      {Number(line.taxAmount).toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium text-gray-900 align-top">
-                      {Number(line.totalAmount).toFixed(2)}
-                    </td>
+                    <td className="align-top">{line.vatCategory}</td>
+                    <td className="cell-right align-top">{Number(line.quantity)}</td>
+                    <td className="cell-right align-top">{Number(line.unitPrice).toFixed(2)}</td>
+                    <td className="cell-right align-top">{Number(line.vatRate)}%</td>
+                    <td className="cell-right align-top">{Number(line.taxAmount).toFixed(2)}</td>
+                    <td className="cell-right cell-strong align-top">{Number(line.totalAmount).toFixed(2)}</td>
                   </tr>
                 );
               })}
             </tbody>
-            <tfoot className="border-t border-gray-200 font-medium">
+            <tfoot className="border-t border-[var(--color-line)] font-medium">
               <tr>
                 <td colSpan={6}></td>
-                <td className="px-3 py-2 text-right text-xs text-gray-500">Subtotal</td>
-                <td className="px-3 py-2 text-right text-gray-900">
+                <td className="cell-right px-5 py-2 text-xs text-[var(--color-ink-subtle)]">Subtotal</td>
+                <td className="cell-right cell-strong px-5 py-2">
                   {Number(inv.subtotalAmount).toFixed(2)}
                 </td>
               </tr>
               <tr>
                 <td colSpan={6}></td>
-                <td className="px-3 py-2 text-right text-xs text-gray-500">Tax</td>
-                <td className="px-3 py-2 text-right text-gray-900">
+                <td className="cell-right px-5 py-2 text-xs text-[var(--color-ink-subtle)]">Tax</td>
+                <td className="cell-right cell-strong px-5 py-2">
                   {Number(inv.taxAmount).toFixed(2)}
                 </td>
               </tr>
               <tr>
                 <td colSpan={6}></td>
-                <td className="px-3 py-2 text-right text-xs font-bold text-gray-700">Total</td>
-                <td className="px-3 py-2 text-right font-bold text-gray-900">
+                <td className="cell-right px-5 py-2 text-xs font-bold text-[var(--color-ink-muted)]">Total</td>
+                <td className="cell-right px-5 py-2 font-bold text-[var(--color-ink)]">
                   {inv.currencyCode} {Number(inv.totalAmount).toFixed(2)}
                 </td>
               </tr>
@@ -682,12 +690,12 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
         <Section title="Event Timeline">
           <div className="space-y-2">
             {inv.events.map((ev) => (
-              <div key={ev.id} className="flex items-start gap-3 text-xs">
-                <span className="text-gray-400 w-36 shrink-0">
+              <div key={ev.id} className="flex items-start gap-3 border border-[var(--color-line-soft)] bg-slate-50 px-3 py-2 text-xs">
+                <span className="w-36 shrink-0 text-[var(--color-ink-subtle)]">
                   {new Date(ev.createdAt).toLocaleString()}
                 </span>
-                <span className="font-mono text-gray-500 w-40 shrink-0">{ev.type}</span>
-                <span className="text-gray-700">{ev.message}</span>
+                <span className="w-40 shrink-0 font-mono text-[var(--color-ink-muted)]">{ev.type}</span>
+                <span className="text-[var(--color-ink)]">{ev.message}</span>
               </div>
             ))}
           </div>
@@ -700,151 +708,316 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [tenantId, setTenantId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [requeueId, setRequeueId] = useState<number | null>(null);
-  const [requeueError, setRequeueError] = useState('');
+  const [listRefreshing, setListRefreshing] = useState(false);
+  const [tenantFilter, setTenantFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [viewing, setViewing] = useState<Invoice | null>(null);
+  const [actionBusy, setActionBusy] = useState<'sync' | null>(null);
+  const [refreshingId, setRefreshingId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [listError, setListError] = useState('');
 
-  const load = () =>
-    Promise.all([invoiceApi.list(), tenantApi.list()]).then(([invoiceRows, tenantRows]) => {
+  const loadList = async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'refresh') setListRefreshing(true);
+    else setLoading(true);
+    setListError('');
+    try {
+      const [invoiceRows, tenantRows] = await Promise.all([invoiceApi.list(), tenantApi.list()]);
       setInvoices(invoiceRows);
       setTenants(tenantRows);
-    });
-
-  useEffect(() => {
-    load()
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const requeue = async (id: number) => {
-    setRequeueError('');
-    setRequeueId(id);
-    try {
-      await invoiceApi.requeue(id);
-      setExpandedId(id);
-      await load();
-    } catch (err) {
-      let message = 'Requeue failed.';
-      if (axios.isAxiosError(err)) {
-        const data = err.response?.data as { message?: string | string[] } | undefined;
-        if (Array.isArray(data?.message)) message = data.message.join(', ');
-        else if (typeof data?.message === 'string') message = data.message;
-        else message = err.message;
-      }
-      setRequeueError(message);
+    } catch (error) {
+      setListError(apiErrorMessage(error));
     } finally {
-      setRequeueId(null);
+      if (mode === 'refresh') setListRefreshing(false);
+      else setLoading(false);
     }
   };
 
-  const tenantById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
-  const visible = tenantId ? invoices.filter((inv) => inv.tenantId === tenantId) : invoices;
+  useEffect(() => {
+    void loadList('initial');
+  }, []);
 
-  if (loading) return <div className="text-gray-400 text-center py-16">Loading...</div>;
+  useEffect(() => {
+    setPage(1);
+  }, [tenantFilter]);
+
+  const tenantById = useMemo(
+    () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
+    [tenants],
+  );
+
+  const filteredInvoices = useMemo(
+    () => (tenantFilter ? invoices.filter((inv) => inv.tenantId === tenantFilter) : invoices),
+    [invoices, tenantFilter],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    if (page !== currentPage) setPage(currentPage);
+  }, [page, currentPage]);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = filteredInvoices.slice(pageStart, pageStart + PAGE_SIZE);
+  const rangeStart = filteredInvoices.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + PAGE_SIZE, filteredInvoices.length);
+
+  const trackingId = viewing ? trackingIdOf(viewing) : '';
+  const canSync = Boolean(trackingId);
+  const applyUpdatedInvoice = (updated: Invoice) => {
+    setInvoices((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+    setViewing((current) => (current?.id === updated.id ? updated : current));
+  };
+
+  const openInvoice = (inv: Invoice) => {
+    setActionError('');
+    setActionBusy(null);
+    setViewing(inv);
+  };
+
+  const refreshStatus = async (invoice: Invoice, source: 'list' | 'detail') => {
+    const id = trackingIdOf(invoice);
+    if (!id) {
+      const message = 'No ASP tracking ID yet — submit first, then refresh status.';
+      if (source === 'list') setListError(message);
+      else setActionError(message);
+      return;
+    }
+
+    if (source === 'list') {
+      if (refreshingId !== null || actionBusy) return;
+      setRefreshingId(invoice.id);
+      setListError('');
+    } else {
+      if (actionBusy || refreshingId !== null) return;
+      setActionBusy('sync');
+      setActionError('');
+    }
+
+    try {
+      const updated = await invoiceApi.syncStatus(invoice.id);
+      applyUpdatedInvoice(updated);
+    } catch (error) {
+      const message = apiErrorMessage(error);
+      if (source === 'list') setListError(message);
+      else setActionError(message);
+    } finally {
+      if (source === 'list') setRefreshingId(null);
+      else setActionBusy(null);
+    }
+  };
+
+  if (loading) return <div className="loading-state">Loading…</div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-
-      <div className="bg-white border border-gray-200 px-5 py-4">
-        <label htmlFor="invoice-tenant" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Tenant code
-        </label>
-        <div className="relative w-full">
-          <select
-            id="invoice-tenant"
-            value={tenantId}
-            onChange={(e) => {
-              setTenantId(e.target.value);
-              setExpandedId(null);
-            }}
-            className="w-full appearance-none border border-gray-300 pl-3 pr-10 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-          >
-            <option value="">All tenants</option>
-            {tenants.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.code} — {tenant.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={16}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-            aria-hidden
-          />
+    <div className="page page-fill">
+      <header className="page-header">
+        <div>
+          <h1 className="page-title">Invoices</h1>
+          <p className="page-subtitle">Submission status, ASP responses, and document detail.</p>
         </div>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={listRefreshing || refreshingId !== null || actionBusy !== null}
+          onClick={() => void loadList('refresh')}
+          title="Reload invoice list"
+        >
+          <RefreshCw size={16} className={listRefreshing ? 'animate-spin' : undefined} />
+          {listRefreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </header>
+
+      <div className="panel panel-fill">
+        <div className="panel-toolbar">
+          <div className="field w-full max-w-sm">
+            <label htmlFor="invoice-tenant-filter" className="field-label">
+              Tenant
+            </label>
+            <SelectMenu
+              id="invoice-tenant-filter"
+              value={tenantFilter}
+              onChange={setTenantFilter}
+              placeholder="All tenants"
+              options={[
+                { value: '', label: 'All tenants' },
+                ...tenants.map((tenant) => ({
+                  value: tenant.id,
+                  label: tenant.code,
+                  description: tenant.name,
+                })),
+              ]}
+            />
+          </div>
+          <p className="text-xs text-[var(--color-ink-subtle)]">
+            {filteredInvoices.length} invoice{filteredInvoices.length === 1 ? '' : 's'}
+            {tenantFilter ? ' for selected tenant' : ''}
+          </p>
+        </div>
+
+        {listError && (
+          <pre className="mx-5 mt-4 shrink-0 border border-red-200 bg-red-50 px-4 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
+            {listError}
+          </pre>
+        )}
+
+        {filteredInvoices.length === 0 ? (
+          <div className="panel-empty">
+            {invoices.length === 0
+              ? 'No invoices yet.'
+              : 'No invoices for the selected tenant.'}
+          </div>
+        ) : (
+          <>
+            <div className="data-table-viewport">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Tenant</th>
+                    <th>Invoice #</th>
+                    <th>Seller</th>
+                    <th>Buyer</th>
+                    <th className="!text-right">Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((inv) => {
+                    const canRefresh = Boolean(trackingIdOf(inv));
+                    const isRowBusy = refreshingId === inv.id;
+                    return (
+                      <tr key={inv.id}>
+                        <td className="cell-mono">{tenantById.get(inv.tenantId)?.code ?? '—'}</td>
+                        <td className="cell-strong">{inv.invoiceNumber}</td>
+                        <td className="max-w-[220px] !whitespace-normal">{inv.sellerName}</td>
+                        <td className="max-w-[220px] !whitespace-normal">{inv.buyerName}</td>
+                        <td className="cell-right cell-strong tabular-nums">
+                          {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
+                        </td>
+                        <td>
+                          <StatusBadge status={inv.status} />
+                        </td>
+                        <td>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openInvoice(inv)}
+                              className="btn-link"
+                              title="View invoice"
+                            >
+                              <Eye size={14} /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void refreshStatus(inv, 'list')}
+                              className="btn-link"
+                              disabled={!canRefresh || isRowBusy || actionBusy !== null}
+                              title={
+                                canRefresh
+                                  ? 'Refresh status from this company ASP'
+                                  : 'Refresh needs an ASP tracking ID'
+                              }
+                            >
+                              <RefreshCw size={14} />
+                              {isRowBusy ? 'Working…' : 'Refresh'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="panel-footer">
+              <p>
+                Showing {rangeStart}–{rangeEnd} of {filteredInvoices.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="tabular-nums text-xs text-[var(--color-ink-subtle)]">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {requeueError && (
-        <p className="text-sm text-red-600">{requeueError}</p>
-      )}
-
-      {visible.length === 0 ? (
-        <div className="bg-white border border-gray-200 p-12 text-center text-gray-400">
-          {tenantId ? 'No invoices for this tenant code.' : 'No invoices yet.'}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {visible.map((inv) => (
-            <div key={inv.id} className="bg-white border border-gray-200">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
-                onKeyDown={(e) => {
-                  if (e.target !== e.currentTarget) return;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setExpandedId(expandedId === inv.id ? null : inv.id);
-                  }
-                }}
-                className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors cursor-pointer"
+      <Modal
+        open={viewing !== null}
+        title={viewing ? `Invoice ${viewing.invoiceNumber}` : 'Invoice'}
+        description={
+          viewing
+            ? `${tenantById.get(viewing.tenantId)?.code ?? '—'} · ${viewing.sellerName} → ${viewing.buyerName}`
+            : undefined
+        }
+        onClose={() => {
+          if (actionBusy) return;
+          setViewing(null);
+          setActionError('');
+        }}
+        size="xl"
+      >
+        {viewing && (
+          <div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!canSync || actionBusy !== null || refreshingId !== null}
+                onClick={() => void refreshStatus(viewing, 'detail')}
+                title={
+                  canSync
+                    ? `Refresh status from ASP for trackingId ${trackingId}`
+                    : 'Refresh needs an ASP trackingId from a prior submit'
+                }
               >
-                <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-sm text-left min-w-0 flex-1">
-                  <span className="font-mono text-xs text-gray-500 whitespace-nowrap">
-                    {tenantById.get(inv.tenantId)?.code ?? '—'}
-                  </span>
-                  <span className="font-medium text-gray-900 truncate">{inv.invoiceNumber}</span>
-                  <span className="text-gray-500 truncate">{inv.sellerName}</span>
-                  <span className="text-gray-500 truncate">{inv.buyerName}</span>
-                  <span className="font-medium text-gray-900 whitespace-nowrap">
-                    {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
-                  </span>
-                  <StatusBadge status={inv.status} />
-                </div>
-                {inv.status === 'FAILED' && (
-                  <button
-                    type="button"
-                    disabled={requeueId === inv.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void requeue(inv.id);
-                    }}
-                    className="inline-flex shrink-0 items-center justify-center bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    {requeueId === inv.id ? 'Requeueing…' : 'Requeue'}
-                  </button>
-                )}
-                {expandedId === inv.id ? (
-                  <ChevronUp size={16} className="text-gray-400 shrink-0" />
-                ) : (
-                  <ChevronDown size={16} className="text-gray-400 shrink-0" />
-                )}
-              </div>
-
-              {inv.lastSubmissionError && expandedId !== inv.id && (
-                <pre className="border-t border-red-100 bg-red-50 px-5 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
-                  {inv.lastSubmissionError}
-                </pre>
+                <RefreshCw size={14} />
+                {actionBusy === 'sync' ? 'Refreshing…' : 'Refresh status'}
+              </button>
+              {trackingId ? (
+                <span className="text-xs text-[var(--color-ink-subtle)]">
+                  Tracking ID: <span className="font-mono text-[var(--color-ink)]">{trackingId}</span>
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--color-ink-subtle)]">
+                  No ASP tracking ID yet — submit first, then refresh status.
+                </span>
               )}
-
-              {expandedId === inv.id && <InvoiceDetails inv={inv} />}
             </div>
-          ))}
-        </div>
-      )}
+            {actionError && (
+              <pre className="mb-4 border border-red-200 bg-red-50 px-4 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
+                {actionError}
+              </pre>
+            )}
+            {viewing.lastSubmissionError && (
+              <pre className="mb-4 border border-red-200 bg-red-50 px-4 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
+                {viewing.lastSubmissionError}
+              </pre>
+            )}
+            <InvoiceDetails inv={viewing} />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

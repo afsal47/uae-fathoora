@@ -19,69 +19,87 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">Loading...</div>;
+    return <div className="loading-state">Loading…</div>;
   }
 
   const totalIntegrations = tenants.reduce((s, t) => s + (t.integrations?.length ?? 0), 0);
-  const accepted = invoices.filter(i => i.status === 'ACCEPTED').length;
-  const rejected = invoices.filter(i => i.status === 'REJECTED').length;
-  const pending = invoices.filter(i => ['DRAFT', 'QUEUED', 'SUBMITTING', 'SUBMITTED'].includes(i.status)).length;
+  const accepted = invoices.filter((i) =>
+    i.status === 'ACCEPTED' || i.status === 'COMPLETED',
+  ).length;
+  const rejected = invoices.filter((i) => i.status === 'REJECTED').length;
+  const pending = invoices.filter((i) =>
+    ['DRAFT', 'QUEUED', 'SUBMITTING', 'SUBMITTED'].includes(i.status),
+  ).length;
 
   const stats = [
-    { label: 'Tenants', value: tenants.length, icon: Building2, color: 'text-blue-600 bg-blue-50' },
-    { label: 'Integrations', value: totalIntegrations, icon: Cable, color: 'text-purple-600 bg-purple-50' },
-    { label: 'Total Invoices', value: invoices.length, icon: FileText, color: 'text-gray-600 bg-gray-100' },
-    { label: 'Accepted', value: accepted, icon: CheckCircle, color: 'text-green-600 bg-green-50' },
-    { label: 'Rejected', value: rejected, icon: XCircle, color: 'text-red-600 bg-red-50' },
-    { label: 'Pending', value: pending, icon: Clock, color: 'text-yellow-600 bg-yellow-50' },
+    { label: 'Tenants', value: tenants.length, icon: Building2, tone: '' },
+    { label: 'Integrations', value: totalIntegrations, icon: Cable, tone: '' },
+    { label: 'Total Invoices', value: invoices.length, icon: FileText, tone: 'is-muted' },
+    { label: 'Accepted', value: accepted, icon: CheckCircle, tone: 'is-success' },
+    { label: 'Rejected', value: rejected, icon: XCircle, tone: 'is-danger' },
+    { label: 'Pending', value: pending, icon: Clock, tone: 'is-warning' },
   ];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white border border-gray-200 p-5 flex items-center gap-4">
-            <div className={`p-3 ${color}`}>
-              <Icon size={22} />
+    <div className="page">
+      <header className="page-header">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">Overview of tenants, integrations, and invoice status.</p>
+        </div>
+      </header>
+
+      <div className="stat-grid">
+        {stats.map(({ label, value, icon: Icon, tone }) => (
+          <div key={label} className="stat-card">
+            <div className={`stat-icon ${tone}`}>
+              <Icon size={20} strokeWidth={1.75} />
             </div>
             <div>
-              <p className="text-sm text-gray-500">{label}</p>
-              <p className="text-2xl font-bold text-gray-900">{value}</p>
+              <p className="stat-label">{label}</p>
+              <p className="stat-value">{value}</p>
             </div>
           </div>
         ))}
       </div>
 
       {invoices.length > 0 && (
-        <div className="bg-white border border-gray-200">
-          <div className="px-5 py-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900">Recent Invoices</h2>
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Recent invoices</h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <div className="data-table-scroll">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <th className="px-5 py-3 text-left font-semibold">Invoice #</th>
-                  <th className="px-5 py-3 text-left font-semibold">Seller</th>
-                  <th className="px-5 py-3 text-left font-semibold">Buyer</th>
-                  <th className="px-5 py-3 text-right font-semibold">Amount</th>
-                  <th className="px-5 py-3 text-left font-semibold">Status</th>
+                  <th>Invoice #</th>
+                  <th>Seller</th>
+                  <th>Buyer</th>
+                  <th className="!text-right">Amount</th>
+                  <th>Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {invoices.slice(0, 5).map(inv => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 font-medium text-gray-900">{inv.invoiceNumber}</td>
-                    <td className="px-5 py-3 text-gray-600">{inv.sellerName}</td>
-                    <td className="px-5 py-3 text-gray-600">{inv.buyerName}</td>
-                    <td className="px-5 py-3 text-right text-gray-900">{inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}</td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium ${
-                        inv.status === 'ACCEPTED' ? 'bg-green-100 text-green-700' :
-                        inv.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>{inv.status}</span>
+              <tbody>
+                {invoices.slice(0, 5).map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="cell-strong">{inv.invoiceNumber}</td>
+                    <td>{inv.sellerName}</td>
+                    <td>{inv.buyerName}</td>
+                    <td className="cell-right cell-strong">
+                      {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          inv.status === 'ACCEPTED' || inv.status === 'COMPLETED'
+                            ? 'badge-success'
+                            : inv.status === 'REJECTED' || inv.status === 'FAILED'
+                              ? 'badge-danger'
+                              : 'badge-warning'
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
                     </td>
                   </tr>
                 ))}

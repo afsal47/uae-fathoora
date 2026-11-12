@@ -89,7 +89,6 @@ export type Tenant = {
   aspProvider: string;
   aspBaseUrl: string | null;
   aspApiKey: string | null;
-  aspWebhookToken: string | null;
   isActive: boolean;
   createdAt: string;
   integrations: Integration[];
@@ -104,7 +103,6 @@ export type Integration = {
   authType: string;
   apiKey: string;
   apiSecret: string;
-  webhookUrl: string | null;
   isActive: boolean;
   createdAt: string;
   _count?: { invoices: number };
@@ -263,8 +261,8 @@ export const invoiceApi = {
   list: () => api.get<Invoice[]>('/admin/invoices').then(r => r.data),
   get: (id: number | string) =>
     api.get<Invoice>(`/admin/invoices/${id}`).then((r) => r.data),
-  requeue: (id: number | string) =>
-    api.post<Invoice>(`/admin/invoices/${id}/requeue`).then((r) => r.data),
+  syncStatus: (id: number | string) =>
+    api.post<Invoice>(`/admin/invoices/${id}/sync-status`).then((r) => r.data),
   xml: (id: number | string) =>
     api
       .get<string>(`/admin/invoices/${id}/xml`, {

@@ -24,18 +24,29 @@ export type AspSubmissionResult = {
   rejectionReason?: string;
 };
 
-export type ParsedWebhookPayload = {
-  tenantCode: string;
-  invoiceId?: number;
-  aspReferenceId?: string;
-  aspMessageId?: string;
+export type AspDocumentStatusResult = {
   status: Extract<
     InvoiceStatus,
-    'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'FAILED' | 'CANCELLED'
+    | 'SUBMITTED'
+    | 'ACCEPTED'
+    | 'COMPLETED'
+    | 'REJECTED'
+    | 'FAILED'
+    | 'CANCELLED'
   >;
-  message: string;
+  trackingId?: string;
+  /** Evatra invoice UUID used by Peppol TDD retry/withdraw (not trackingId). */
+  invoiceId?: string;
+  companyId?: string;
+  message?: string;
   rejectionReason?: string;
-  rawPayload: Record<string, unknown>;
+  raw: Record<string, unknown>;
+};
+
+export type AspRetryResult = {
+  ok: boolean;
+  message?: string;
+  raw: Record<string, unknown>;
 };
 
 export class AspSubmissionError extends Error {
@@ -51,5 +62,13 @@ export class AspSubmissionError extends Error {
 export interface AspProviderAdapter {
   readonly provider: string;
   submitInvoice(context: AspSubmissionContext): Promise<AspSubmissionResult>;
-  parseWebhook(payload: Record<string, unknown>): Promise<ParsedWebhookPayload>;
+  getDocumentStatus(
+    tenant: Tenant,
+    trackingId: string,
+  ): Promise<AspDocumentStatusResult>;
+  retryTddFailed(
+    tenant: Tenant,
+    invoiceId: string,
+    companyId: string,
+  ): Promise<AspRetryResult>;
 }
