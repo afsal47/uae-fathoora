@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Shield } from 'lucide-react';
 import { getAdminKey, setAdminKey, clearAdminKey, verifyAdminKey } from '../lib/api';
 
 export default function LoginPage() {
@@ -56,67 +56,73 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-6 sm:p-10">
-      <div className="w-full max-w-md">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-blue-600 text-white">
-            <ShieldCheck size={20} />
+    <div className="login-shell">
+      <aside className="login-aside">
+        <div>
+          <div className="app-brand-mark">
+            <Shield size={18} />
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold leading-tight text-slate-900">UAE-FATHOORA</p>
-            <p className="mt-0.5 text-xs leading-tight text-slate-500">Administration</p>
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Use the access key issued for this hub.
+          <h1>UAE-FATHOORA</h1>
+          <p>
+            Secure administration for tenants, source systems, and Peppol invoice
+            submission.
           </p>
         </div>
+        <p className="text-xs text-slate-500">Hub console · Access key required</p>
+      </aside>
 
-        {checking ? (
-          <p className="mt-8 text-sm text-slate-400">Checking your session…</p>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            {error && (
-              <p className="text-sm text-red-700 bg-red-50 border border-red-100 px-3 py-2.5">
-                {error}
-              </p>
-            )}
-            <div>
-              <label htmlFor="access-key" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Access key
-              </label>
-              <div className="relative">
-                <input
-                  id="access-key"
-                  type={showKey ? 'text' : 'password'}
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  autoComplete="current-password"
-                  autoFocus
-                  className="w-full border border-slate-300 bg-white pl-3 pr-11 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700"
-                  aria-label={showKey ? 'Hide access key' : 'Show access key'}
-                >
-                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+      <div className="login-main">
+        <div className="login-card">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <div className="app-brand-mark">
+              <Shield size={18} />
             </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
-            >
-              {submitting ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-        )}
+            <div>
+              <p className="text-sm font-semibold text-[var(--color-ink)]">UAE-FATHOORA</p>
+              <p className="text-xs text-[var(--color-ink-subtle)]">Administration</p>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="page-title">Sign in</h2>
+            <p className="page-subtitle">Use the access key issued for this hub.</p>
+          </div>
+
+          {checking ? (
+            <p className="mt-8 text-sm text-[var(--color-ink-subtle)]">Checking your session…</p>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              {error && <p className="alert-error">{error}</p>}
+              <div className="field">
+                <label htmlFor="access-key" className="field-label">
+                  Access key
+                </label>
+                <div className="relative">
+                  <input
+                    id="access-key"
+                    type={showKey ? 'text' : 'password'}
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    autoComplete="current-password"
+                    autoFocus
+                    className="input pr-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--color-ink-subtle)] hover:text-[var(--color-ink)]"
+                    aria-label={showKey ? 'Hide access key' : 'Show access key'}
+                  >
+                    {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" disabled={submitting} className="btn btn-primary w-full">
+                {submitting ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -132,11 +138,7 @@ export function RequireAdmin() {
   }, []);
 
   if (!ready) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-400">
-        Loading…
-      </div>
-    );
+    return <div className="loading-state min-h-screen">Loading…</div>;
   }
 
   if (!ok) {

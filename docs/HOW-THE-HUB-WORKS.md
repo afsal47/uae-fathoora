@@ -4,7 +4,7 @@ This note is for developers joining the project. It explains who talks to whom, 
 
 ## What this system is
 
-UAE-FATHOORA is a multi-tenant e-invoicing hub. A source system (for example IBMS) sends an invoice as JSON. The hub stores it, builds Peppol PINT-AE XML, and posts that XML to the tenant’s Access Point (ASP). The ASP is the service that delivers the invoice onward (Peppol / FTA). The hub then tells the source system the result by webhook.
+UAE-FATHOORA is a multi-tenant e-invoicing hub. A source system (for example IBMS) sends an invoice as JSON. The hub stores it, builds Peppol PINT-AE XML, and posts that XML to the tenant’s Access Point (ASP). The ASP is the service that delivers the invoice onward (Peppol / FTA). The source system learns the result by **polling** Hub status APIs (no webhooks).
 
 ```
 Source system                Hub                         Access Point
@@ -15,8 +15,9 @@ POST /v1/invoices  ───────▶  save invoice
   x-api-key                    build PINT-AE XML
                                POST JSON ───────────────▶  aspBaseUrl
                                (XML as base64Document)
-                               ◀──────── status
-webhook ◀────────────────────  invoice.accepted / rejected / failed
+                               ◀──────── status / trackingId
+GET  /v1/invoices/.../status ◀─ refreshed status (Hub may poll ASP)
+POST /v1/invoices/:id/asp-retry ▶ ASP /peppol/tdd/retry-failed
 ```
 
 There are two apps in this repo:
@@ -55,8 +56,8 @@ Sign-in uses the hub admin key (`ADMIN_API_KEY` in `backend/.env`). The browser 
 | Page | Route | What you do there |
 |------|-------|-------------------|
 | Dashboard | `/` | Counts and recent invoices |
-| Tenants | `/tenants` | Register a company and its ASP (`aspProvider`, `aspBaseUrl`, ASP API key, webhook token) |
-| Integrations | `/integrations` | Pick a tenant, then create the source-system client (code, name, webhook URL). The hub shows the API key and secret once. |
+| Tenants | `/tenants` | Register a company and its ASP (`aspProvider`, `aspBaseUrl`, ASP API key) |
+| Integrations | `/integrations` | Pick a tenant, then create the source-system client (code, name). The hub shows the API key and secret once. |
 | Invoices | `/invoices` | Read status, amounts, and submission detail. Invoices are created by the API, not by this page. |
 
 The hub URL is **not** stored on the integration. Each source system keeps it in its own environment.
@@ -79,7 +80,7 @@ For a hub running on your machine, use `http://localhost:3004/v1`. Restart the s
 
 The API key and secret are created on the Integrations page (**Regen Keys** replaces them). Copy them into the source system `.env`. Do not commit them.
 
-Optional: set the integration **Webhook URL** so the hub can POST status events back (`invoice.submitted`, `invoice.accepted`, `invoice.rejected`, `invoice.failed`, `invoice.cancelled`).
+Status is by polling only (`GET /v1/invoices/status` or `GET /v1/invoices/:id/status`). Retry is `POST /v1/invoices/:id/asp-retry`.
 
 ## What happens when an invoice is posted
 
@@ -91,10 +92,8 @@ Optional: set the integration **Webhook URL** so the hub can POST status events 
 6. The hub assigns the next Peppol number for that tenant: `inv-1`, `inv-2`, and so on (`tenants.invoiceSequence`).
 7. The invoice is saved as `QUEUED` and a job is added.
 8. The worker builds PINT-AE XML. `GenericAspAdapter` logs in at `{origin}/auth/login` with the tenant ASP API key and tenant email, then POSTs the document to `aspBaseUrl`. The header is `R-Auth` with the returned JWT. The XML is Base64 in `base64Document`, and the same API key is the body field `apiKey`.
-9. Status moves through `QUEUED` → `SUBMITTING` → `SUBMITTED` → `ACCEPTED` or `REJECTED`. A transport or ASP error becomes `FAILED`. `POST /v1/invoices/:id/requeue` retries a failed invoice.
-10. If the integration has a webhook URL, the hub queues a callback to the source system.
-
-ASP replies can also arrive at `POST /v1/asp/webhooks/:provider`.
+9. Status moves through `QUEUED` → `SUBMITTING` → `SUBMITTED` → `ACCEPTED` / `COMPLETED` or `REJECTED`. Evatra `COMPLETED` is stored as hub `COMPLETED`. A transport or ASP error becomes `FAILED`.
+10. After submit, the hub stores the ASP `trackingId`. Source systems poll status; Hub may poll ASP on that refresh. `POST /v1/invoices/:id/asp-retry` calls ASP Peppol TDD retry (`/peppol/tdd/retry-failed`) with ASP `companyId` + `invoiceId` (not `trackingId`).
 
 ## Invoice numbers
 
@@ -106,7 +105,7 @@ ASP replies can also arrive at `POST /v1/asp/webhooks/:provider`.
 
 ## Queue
 
-Invoice submission and outbound webhooks run through BullMQ when Redis is configured.
+Invoice submission runs through BullMQ when Redis is configured.
 
 | `QUEUE_MODE` | Behaviour |
 |--------------|-----------|
@@ -177,7 +176,7 @@ If `npm run start:dev` crashes with `Cannot find module './app.controller'`, sto
 | API key check | `backend/src/auth/api-key.guard.ts` |
 | Admin key check | `backend/src/auth/admin-auth.guard.ts` |
 | Queue | `backend/src/queue/queue.service.ts` |
-| Status callback to the source system | `backend/src/webhooks/outbound-webhook.service.ts` |
+| Status poll / ASP retry for source systems | `backend/src/invoices/invoices.controller.ts` |
 | Admin screens | `frontend/src/pages/` |
 | Source-system payload examples | `backend/docs/IBMS-INTEGRATION-GUIDE.md` |
 

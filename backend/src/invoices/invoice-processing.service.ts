@@ -1,19 +1,18 @@
 import {
+  BadGatewayException,
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { Invoice } from '@prisma/client';
 import { Worker } from 'bullmq';
 import { AspProviderResolverService } from '../asp/asp-provider-resolver.service';
-import { AspSubmissionError, ParsedWebhookPayload } from '../asp/asp.types';
-import { SecretsCryptoService } from '../auth/secrets-crypto.service';
+import { AspSubmissionError } from '../asp/asp.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
-import { OutboundWebhookService, WebhookEvent } from '../webhooks/outbound-webhook.service';
 import {
   EVENT_TYPE,
   INVOICE_QUEUE_NAME,
@@ -41,8 +40,6 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
     private readonly aspProviderResolver: AspProviderResolverService,
-    private readonly outboundWebhook: OutboundWebhookService,
-    private readonly secrets: SecretsCryptoService,
   ) {}
 
   onModuleInit() {
@@ -209,12 +206,6 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      void this.outboundWebhook.notify(
-        invoice.integration,
-        updated,
-        `invoice.${result.status.toLowerCase()}` as WebhookEvent,
-      );
-
       return updated;
     } catch (error) {
       const message =
@@ -303,63 +294,16 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async handleWebhook(
-    providerName: string,
-    headers: Record<string, string | string[] | undefined>,
-    payload: Record<string, unknown>,
-  ) {
-    const provider = this.aspProviderResolver.resolve(providerName);
-    const webhook = await provider.parseWebhook(payload);
-    const tenant = await this.prisma.tenant.findFirst({
-      where: {
-        code: webhook.tenantCode,
-        aspProvider: providerName.toUpperCase(),
-        isActive: true,
-      },
-    });
-
-    if (!tenant) {
-      throw new NotFoundException(
-        `Active tenant ${webhook.tenantCode} was not found for provider ${providerName}.`,
-      );
-    }
-
-    this.assertWebhookToken(tenant.aspWebhookToken, headers);
-
-    const invoice = await this.findInvoiceForWebhook(tenant.id, webhook);
-    const integration = await this.prisma.integration.findFirst({
-      where: { id: invoice.integrationId },
-    });
-    const statusData = this.buildStatusUpdate(webhook.status, webhook.rejectionReason);
-
-    const updated = await this.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        status: webhook.status,
-        acceptedAt: statusData.acceptedAt,
-        rejectedAt: statusData.rejectedAt,
-        cancelledAt: statusData.cancelledAt,
-        rejectionReason: webhook.rejectionReason ?? null,
-        aspResponse: JSON.stringify(webhook.rawPayload),
-        events: {
-          create: [
-            {
-              type: EVENT_TYPE.WEBHOOK_RECEIVED,
-              fromStatus: invoice.status,
-              toStatus: invoice.status,
-              message: webhook.message,
-              payload: JSON.stringify(webhook.rawPayload),
-            },
-            {
-              type: EVENT_TYPE.STATUS_RECONCILED,
-              fromStatus: invoice.status,
-              toStatus: webhook.status,
-              message: `Webhook reconciled invoice status to ${webhook.status}.`,
-            },
-          ],
-        },
-      },
+  /**
+   * Poll the invoice tenant's ASP document-status endpoint and reconcile hub status.
+   * When ASP status is unchanged, returns the current hub invoice without writing a new event.
+   */
+  async syncAspStatus(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
       include: {
+        tenant: true,
+        integration: true,
         lines: true,
         events: {
           orderBy: { createdAt: 'asc' },
@@ -367,82 +311,369 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (integration) {
-      void this.outboundWebhook.notify(
-        integration,
-        updated,
-        `invoice.${webhook.status.toLowerCase()}` as WebhookEvent,
+    if (!invoice) {
+      throw new NotFoundException(`Invoice ${invoiceId} was not found.`);
+    }
+
+    const trackingId = this.resolveTrackingId(invoice);
+    if (!trackingId) {
+      throw new BadRequestException(
+        `Invoice ${invoiceId} has no ASP trackingId. Submit or retry first.`,
       );
     }
 
-    return updated;
+    const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
+
+    try {
+      const result = await provider.getDocumentStatus(invoice.tenant, trackingId);
+      const nextMessageId = result.trackingId || invoice.aspMessageId;
+      const nextReferenceId = result.trackingId || invoice.aspReferenceId;
+      const nextRejection = result.rejectionReason ?? null;
+      const aspInvoiceId =
+        result.invoiceId ||
+        this.readAspInvoiceId(JSON.stringify(result.raw)) ||
+        this.readAspInvoiceId(invoice.aspResponse) ||
+        this.readDocumentUuid(invoice.aspPayload);
+      const companyId =
+        result.companyId ||
+        this.readAspCompanyId(JSON.stringify(result.raw)) ||
+        this.readAspCompanyId(invoice.aspResponse);
+      const enrichedAspResponse = {
+        ...result.raw,
+        ...(companyId ? { companyId } : {}),
+        ...(aspInvoiceId ? { invoiceId: aspInvoiceId } : {}),
+        trackingId: result.trackingId || trackingId,
+      };
+      const enrichedAspResponseJson = JSON.stringify(enrichedAspResponse);
+      const hadCompanyId = Boolean(this.readAspCompanyId(invoice.aspResponse));
+      const hadInvoiceId = Boolean(this.readAspInvoiceId(invoice.aspResponse));
+      const idsNewlyLearned =
+        (Boolean(companyId) && !hadCompanyId) ||
+        (Boolean(aspInvoiceId) && !hadInvoiceId);
+      const statusChanged = invoice.status !== result.status;
+      const metaChanged =
+        (invoice.aspMessageId || null) !== (nextMessageId || null) ||
+        (invoice.aspReferenceId || null) !== (nextReferenceId || null) ||
+        (invoice.rejectionReason || null) !== nextRejection;
+
+      // Polling should not spam events when ASP status/meta is unchanged.
+      // Still quietly store newly discovered companyId/invoiceId for retry.
+      if (!statusChanged && !metaChanged) {
+        if (idsNewlyLearned) {
+          await this.prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { aspResponse: enrichedAspResponseJson },
+          });
+        }
+        return invoice;
+      }
+
+      const statusData = this.buildStatusUpdate(result.status, result.rejectionReason);
+
+      const updated = await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: result.status,
+          aspMessageId: nextMessageId,
+          aspReferenceId: nextReferenceId,
+          acceptedAt: statusData.acceptedAt,
+          rejectedAt: statusData.rejectedAt,
+          cancelledAt: statusData.cancelledAt,
+          rejectionReason: nextRejection,
+          lastSubmissionError: null,
+          aspResponse: enrichedAspResponseJson,
+          events: {
+            create: {
+              type: EVENT_TYPE.ASP_STATUS_SYNCED,
+              fromStatus: invoice.status,
+              toStatus: result.status,
+              message:
+                result.message ??
+                `Polled ASP document status for trackingId ${trackingId}.`,
+              payload: enrichedAspResponseJson,
+            },
+          },
+        },
+        include: {
+          lines: true,
+          events: {
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      return updated;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown ASP status sync failure.';
+      const aspResponse =
+        error instanceof AspSubmissionError && error.responseBody
+          ? JSON.stringify(error.responseBody)
+          : null;
+
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          lastSubmissionError: message.slice(0, 2000),
+          ...(aspResponse ? { aspResponse } : {}),
+          events: {
+            create: {
+              type: EVENT_TYPE.ASP_STATUS_SYNCED,
+              fromStatus: invoice.status,
+              toStatus: invoice.status,
+              message: message.slice(0, 1000),
+            },
+          },
+        },
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * ASP retry: Peppol TDD retry for this invoice
+   * (ASP POST /peppol/tdd/retry-failed). Requires ASP invoiceId + companyId.
+   */
+  async retryAsp(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        tenant: true,
+        events: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { payload: true },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Invoice ${invoiceId} was not found.`);
+    }
+
+    const trackingId = this.resolveTrackingId(invoice);
+    if (!trackingId) {
+      throw new BadRequestException(
+        `Invoice ${invoiceId} has no ASP trackingId. Submit the invoice to ASP first.`,
+      );
+    }
+
+    const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
+
+    let companyId =
+      this.readAspCompanyId(invoice.aspResponse) ||
+      invoice.events.map((event) => this.readAspCompanyId(event.payload)).find(Boolean) ||
+      '';
+    let aspInvoiceId =
+      this.readAspInvoiceId(invoice.aspResponse) ||
+      invoice.events.map((event) => this.readAspInvoiceId(event.payload)).find(Boolean) ||
+      this.readDocumentUuid(invoice.aspPayload) ||
+      '';
+
+    // Recover companyId / invoiceId from ASP document-status when aspResponse lost them.
+    if (!companyId || !aspInvoiceId) {
+      try {
+        const status = await provider.getDocumentStatus(invoice.tenant, trackingId);
+        companyId =
+          companyId ||
+          status.companyId ||
+          this.readAspCompanyId(JSON.stringify(status.raw)) ||
+          '';
+        aspInvoiceId =
+          aspInvoiceId ||
+          status.invoiceId ||
+          this.readAspInvoiceId(JSON.stringify(status.raw)) ||
+          this.readDocumentUuid(invoice.aspPayload) ||
+          '';
+        if (companyId || aspInvoiceId) {
+          await this.prisma.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              aspResponse: JSON.stringify({
+                ...status.raw,
+                ...(companyId ? { companyId } : {}),
+                ...(aspInvoiceId ? { invoiceId: aspInvoiceId } : {}),
+                trackingId,
+              }),
+            },
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Could not recover ASP ids via document-status for invoice ${invoiceId}: ${message}`,
+        );
+      }
+    }
+
+    if (!companyId) {
+      throw new BadRequestException(
+        `Invoice ${invoiceId} has no ASP companyId. Refresh status from ASP first, then retry.`,
+      );
+    }
+
+    if (!aspInvoiceId) {
+      throw new BadRequestException(
+        `Invoice ${invoiceId} has no ASP invoiceId. Refresh status from ASP first, then retry.`,
+      );
+    }
+
+    try {
+      const retry = await provider.retryTddFailed(
+        invoice.tenant,
+        aspInvoiceId,
+        companyId,
+      );
+
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          lastSubmissionError: null,
+          aspResponse: JSON.stringify({
+            ...((retry.raw && typeof retry.raw === 'object' ? retry.raw : {}) as object),
+            companyId,
+            invoiceId: aspInvoiceId,
+            trackingId,
+          }),
+          events: {
+            create: {
+              type: EVENT_TYPE.ASP_RETRY_REQUESTED,
+              fromStatus: invoice.status,
+              toStatus: invoice.status,
+              message:
+                retry.message ??
+                `Requested ASP TDD retry for invoiceId ${aspInvoiceId}.`,
+              payload: JSON.stringify({
+                ...retry.raw,
+                companyId,
+                invoiceId: aspInvoiceId,
+                trackingId,
+              }),
+            },
+          },
+        },
+      });
+
+      return this.syncAspStatus(invoiceId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown ASP retry failure.';
+      const aspErrorBody =
+        error instanceof AspSubmissionError && error.responseBody
+          ? error.responseBody
+          : null;
+
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          lastSubmissionError: message.slice(0, 2000),
+          // Keep ASP ids available for the next retry attempt.
+          aspResponse: JSON.stringify({
+            ...(aspErrorBody ?? {}),
+            companyId,
+            invoiceId: aspInvoiceId,
+            trackingId,
+          }),
+          events: {
+            create: {
+              type: EVENT_TYPE.ASP_RETRY_REQUESTED,
+              fromStatus: invoice.status,
+              toStatus: invoice.status,
+              message: message.slice(0, 1000),
+              payload: aspErrorBody ? JSON.stringify(aspErrorBody) : null,
+            },
+          },
+        },
+      });
+
+      if (error instanceof AspSubmissionError) {
+        const aspMessage =
+          this.readAspErrorMessage(error.responseBody) || error.message;
+        throw new BadGatewayException({
+          statusCode: 502,
+          message: aspMessage,
+          error: 'Bad Gateway',
+          details: error.responseBody ?? null,
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private resolveTrackingId(invoice: Pick<Invoice, 'aspMessageId' | 'aspReferenceId'>) {
+    return invoice.aspMessageId?.trim() || invoice.aspReferenceId?.trim() || '';
+  }
+
+  /** ASP company id returned on document-status / submit responses. */
+  private readAspCompanyId(raw?: string | null): string {
+    if (!raw?.trim()) return '';
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const value = parsed.companyId ?? parsed.company_id ?? parsed.compId;
+      return typeof value === 'string' ? value.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * ASP invoice UUID for Peppol TDD retry (not Hub id / trackingId).
+   * Evatra document-status stores it as documentId; retry API calls it invoiceId.
+   */
+  private readAspInvoiceId(raw?: string | null): string {
+    if (!raw?.trim()) return '';
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const direct =
+        parsed.invoiceId ??
+        parsed.invoice_id ??
+        parsed.invalidInvoiceId ??
+        parsed.invalid_invoice_id ??
+        parsed.documentId ??
+        parsed.document_id;
+      if (typeof direct === 'string' && isDocumentUuid(direct)) {
+        return direct.trim();
+      }
+      for (const nestedKey of ['invoice', 'document', 'tdd', 'data']) {
+        const nested = parsed[nestedKey];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          const row = nested as Record<string, unknown>;
+          const value =
+            row.invoiceId ??
+            row.invoice_id ??
+            row.invalidInvoiceId ??
+            row.documentId ??
+            row.document_id ??
+            row.id;
+          if (typeof value === 'string' && isDocumentUuid(value)) {
+            return value.trim();
+          }
+        }
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** Hub-minted PINT cbc:UUID from aspPayload; usable when ASP mirrors it as invoiceId. */
+  private readDocumentUuid(aspPayload?: string | null): string {
+    const passthrough = parseAspPassthrough(aspPayload);
+    const value = passthrough?.documentUuid;
+    return isDocumentUuid(value) ? String(value).trim() : '';
+  }
+
+  private readAspErrorMessage(body?: Record<string, unknown> | null): string {
+    if (!body) return '';
+    const value =
+      body.errorMessage ?? body.message ?? body.errorTitle ?? body.error;
+    return typeof value === 'string' ? value.trim() : '';
   }
 
   async onModuleDestroy() {
     await this.worker?.close();
-  }
-
-  private async findInvoiceForWebhook(
-    tenantId: string,
-    webhook: ParsedWebhookPayload,
-  ): Promise<Invoice> {
-    if (webhook.invoiceId) {
-      const invoice = await this.prisma.invoice.findFirst({
-        where: {
-          id: webhook.invoiceId,
-          tenantId,
-        },
-      });
-
-      if (invoice) {
-        return invoice;
-      }
-    }
-
-    if (webhook.aspReferenceId) {
-      const invoice = await this.prisma.invoice.findFirst({
-        where: {
-          tenantId,
-          aspReferenceId: webhook.aspReferenceId,
-        },
-      });
-
-      if (invoice) {
-        return invoice;
-      }
-    }
-
-    if (webhook.aspMessageId) {
-      const invoice = await this.prisma.invoice.findFirst({
-        where: {
-          tenantId,
-          aspMessageId: webhook.aspMessageId,
-        },
-      });
-
-      if (invoice) {
-        return invoice;
-      }
-    }
-
-    throw new NotFoundException('Webhook did not include a known invoice identifier.');
-  }
-
-  private assertWebhookToken(
-    expectedToken: string | null,
-    headers: Record<string, string | string[] | undefined>,
-  ) {
-    const plainExpected = this.secrets.decrypt(expectedToken);
-    if (!plainExpected) {
-      return;
-    }
-
-    const headerToken = headers['x-webhook-token'];
-    const value = Array.isArray(headerToken) ? headerToken[0] : headerToken;
-
-    if (value !== plainExpected) {
-      throw new UnauthorizedException('Webhook token is invalid.');
-    }
   }
 
   private buildStatusUpdate(status: InvoiceStatus, rejectionReason?: string | null) {
@@ -457,12 +688,16 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     if (
       status === INVOICE_STATUS.SUBMITTED ||
       status === INVOICE_STATUS.ACCEPTED ||
+      status === INVOICE_STATUS.COMPLETED ||
       status === INVOICE_STATUS.REJECTED
     ) {
       update.submittedAt = now;
     }
 
-    if (status === INVOICE_STATUS.ACCEPTED) {
+    if (
+      status === INVOICE_STATUS.ACCEPTED ||
+      status === INVOICE_STATUS.COMPLETED
+    ) {
       update.acceptedAt = now;
     }
 

@@ -32,8 +32,6 @@ export class IntegrationsService {
           authType: dto.authType ?? 'API_KEY_HMAC',
           apiKey,
           apiSecret: this.secrets.encrypt(apiSecretPlain)!,
-          webhookUrl: dto.webhookUrl,
-          webhookSecret: this.secrets.encrypt(dto.webhookSecret) ?? null,
           allowedIpRanges: dto.allowedIpRanges,
         },
       });
@@ -42,7 +40,6 @@ export class IntegrationsService {
       return {
         ...created,
         apiSecret: apiSecretPlain,
-        webhookSecret: dto.webhookSecret ?? null,
       };
     } catch (error) {
       if (
@@ -94,11 +91,6 @@ export class IntegrationsService {
       where: { id: integrationId },
       data: {
         name: dto.name,
-        webhookUrl: dto.webhookUrl,
-        webhookSecret:
-          dto.webhookSecret !== undefined
-            ? this.secrets.encrypt(dto.webhookSecret)
-            : undefined,
         allowedIpRanges: dto.allowedIpRanges,
         isActive: dto.isActive,
       },
@@ -127,16 +119,11 @@ export class IntegrationsService {
     };
   }
 
-  private maskSecrets<
-    T extends { apiKey: string; apiSecret: string; webhookSecret?: string | null },
-  >(row: T) {
+  private maskSecrets<T extends { apiKey: string; apiSecret: string }>(row: T) {
     return {
       ...row,
       apiKey: this.secrets.mask(row.apiKey, 12) ?? row.apiKey,
       apiSecret: this.secrets.mask(row.apiSecret, 8) ?? '****',
-      webhookSecret: row.webhookSecret
-        ? this.secrets.mask(row.webhookSecret, 8)
-        : null,
     };
   }
 

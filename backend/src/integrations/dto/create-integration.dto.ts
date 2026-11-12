@@ -25,18 +25,6 @@ export class CreateIntegrationDto {
   @MaxLength(50)
   authType?: string;
 
-  @ApiPropertyOptional({ description: 'Webhook URL to notify source system on invoice status changes' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  webhookUrl?: string;
-
-  @ApiPropertyOptional({ description: 'Secret for signing outbound webhook payloads' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  webhookSecret?: string;
-
   @ApiPropertyOptional({ description: 'Comma-separated allowed IP ranges' })
   @IsOptional()
   @IsString()

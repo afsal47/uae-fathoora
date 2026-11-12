@@ -6,10 +6,13 @@
 ## Overview
 
 ```
-IBMS  ──POST /v1/invoices──▶  Hub  ──▶  ASP (ClearTax)  ──▶  Peppol + FTA
-                                │
-                                └──webhook──▶  IBMS (status callback)
+IBMS  ──POST /v1/invoices──────────▶  Hub  ──▶  ASP  ──▶  Peppol + FTA
+IBMS  ◀─GET  /v1/invoices/.../status─┘         │
+IBMS  ──POST /v1/invoices/:id/asp-retry───────▶│──▶ /peppol/tdd/retry-failed
 ```
+
+Status and retry for IBMS are **poll / request APIs only** (no Hub→IBMS webhooks).  
+Hub itself **auto-polls ASP** in the background for in-progress invoices and updates Hub status.
 
 ---
 
@@ -274,15 +277,117 @@ x-signature: ...
 
 ---
 
-## 9. Status / webhooks / requeue
+## 9. Status tracking (poll API)
 
-Same as before:
+IBMS should **poll Hub** to refresh Status / ASP reference columns.
 
-- `GET /v1/invoices/:id/status`
-- Webhook events: `invoice.submitted` / `accepted` / `rejected` / `failed` / `cancelled`
-- `POST /v1/invoices/:id/requeue` for `FAILED`
+**Hub background sync:** every `ASP_STATUS_SYNC_INTERVAL_MS` (default 1 hour), Hub polls ASP for
+invoices still in `SUBMITTED` / `ACCEPTED` / `FAILED` that have an ASP tracking id, and updates
+Hub status when ASP has moved on. Disable with `ASP_STATUS_SYNC_ENABLED=false`.
 
-Statuses: `DRAFT` → `QUEUED` → `SUBMITTING` → `SUBMITTED` → `ACCEPTED` / `REJECTED` / `FAILED`
+On each IBMS status poll, when the invoice has an ASP tracking id and is still in progress
+(`SUBMITTED` / `ACCEPTED` / `FAILED`), **Hub also polls that company ASP**,
+updates the Hub invoice status if ASP has moved on, then returns the refreshed payload.
+IBMS does **not** need a separate sync-status call.
+
+### Track by Hub id (preferred)
+
+```
+GET /v1/invoices/status?hubInvoiceId=50
+```
+
+or
+
+```
+GET /v1/invoices/50/status
+```
+
+### Track by source keys
+
+```
+GET /v1/invoices/status?sourceDocumentId=100245
+GET /v1/invoices/status?sourceSystemDCNoteId=119
+```
+
+Auth headers: same as create (`x-api-key`, `x-timestamp`, `x-signature`).  
+For GET, sign empty JSON object: `HMAC-SHA256(`${timestamp}.{}`)`.
+
+### Response (Swagger: `InvoiceStatusResponseDto`)
+
+| Field | Use in IBMS |
+|-------|-------------|
+| `id` | Hub invoice column |
+| `status` | Status column (`COMPLETED`/`ACCEPTED` → Posted, `FAILED`/`REJECTED` → Failed, else Processing) |
+| `aspReferenceId` | ASP reference column |
+| `rejectionReason` | Reject reason column |
+
+### Retry — connect to source system (step by step)
+
+IBMS must **never call ASP directly**. Retry is only:
+
+`POST /v1/invoices/{hubInvoiceId}/asp-retry` → Hub → ASP `/peppol/tdd/retry-failed`
+
+**Use Swagger tag `Invoices` (`/v1/invoices/...`), not `Admin - Invoices`.**
+
+#### Step 1 — Hub credentials in IBMS `.env`
+
+```env
+EINVOICE_HUB_URL=http://localhost:3000/v1
+EINVOICE_API_KEY=key_...
+EINVOICE_API_SECRET=secret_...
+EINVOICE_TENANT_CODE=CITY_MARINE
+EINVOICE_SOURCE_SYSTEM=IBMS_BROKING
+```
+
+#### Step 2 — Save Hub invoice id on create
+
+When IBMS posts `POST /v1/invoices`, store the response `id` (Hub numeric id) on the IBMS invoice / DC note row. That id is required for retry.
+
+#### Step 3 — Show Retry only when ASP tracking exists
+
+Enable the Retry button when Hub status poll shows a tracking / ASP reference id (and status is still retryable, e.g. `FAILED` / `SUBMITTED`). Without `trackingId`, ASP retry returns `400`. Hub then calls Evatra with ASP `companyId` + `invoiceId` (not `trackingId`).
+
+#### Step 4 — Wire the Retry button to Hub
+
+```typescript
+async aspRetry(hubInvoiceId: number) {
+  const timestamp = Date.now().toString();
+  const body = '{}';
+  const signature = crypto
+    .createHmac('sha256', process.env.EINVOICE_API_SECRET!)
+    .update(`${timestamp}.${body}`)
+    .digest('hex');
+
+  const res = await fetch(
+    `${process.env.EINVOICE_HUB_URL}/invoices/${hubInvoiceId}/asp-retry`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.EINVOICE_API_KEY!,
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+      },
+      body,
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Hub asp-retry failed (${res.status}): ${await res.text()}`);
+  }
+  return res.json();
+}
+
+// UI
+onRetryClick(hubInvoiceId: number) {
+  return this.aspRetry(hubInvoiceId);
+}
+```
+
+#### Step 5 — Refresh status after retry
+
+Call `GET /v1/invoices/status?hubInvoiceId={id}` (or `GET /v1/invoices/{id}/status`) and update IBMS Status / ASP reference columns from the response.
+
+Statuses: `DRAFT` → `QUEUED` → `SUBMITTING` → `SUBMITTED` → `ACCEPTED` / `COMPLETED` / `REJECTED` / `FAILED`
 
 ---
 
@@ -307,12 +412,18 @@ EINVOICE_SOURCE_SYSTEM=IBMS_BROKING
 - [ ] Invoice family: `paymentMeans` + `dueDate`
 - [ ] Self-bill: `profileExecutionId` = `00000000` and correct seller/buyer roles
 - [ ] AE lines: `rcmNatureCode`
-- [ ] Save Hub `id` and show status in IBMS UI
+- [ ] Save Hub `id` and poll `GET /v1/invoices/status?hubInvoiceId=…` (or `GET /v1/invoices/:id/status`) — Hub pulls ASP status and updates itself, then returns Status / ASP reference
+- [ ] Retry button → `POST /v1/invoices/:id/asp-retry` (Swagger **Invoices**, not Admin; needs ASP trackingId)
 
 ---
 
 ## Support
 
 - Swagger: `http://localhost:3000/docs`
+  - **Invoices** — IBMS / source systems (`x-api-key` + HMAC)
+  - **Admin - Invoices** — Hub dashboard only (`x-admin-key`)
 - Admin Dashboard: `http://localhost:5173`
 - Spec source: Evatra Data Dictionary Excel (Invoice Types / Codes / Calculation Layers)
+
+IBMS status is poll-only (no Hub→IBMS webhooks). Hub auto-syncs from ASP in the background.
+Do not configure source-system webhook callbacks for this hub.

@@ -1,24 +1,14 @@
-
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import IORedis, { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
-import {
-  INVOICE_SUBMISSION_JOB,
-  WEBHOOK_DELIVERY_JOB,
-  WEBHOOK_QUEUE_NAME,
-} from '../invoices/invoice.constants';
+import { INVOICE_SUBMISSION_JOB } from '../invoices/invoice.constants';
 
 type QueueJobPayload = {
   invoiceId: number;
 };
 
-export type WebhookJobPayload = {
-  deliveryId: string;
-};
-
 type InlineProcessor = (payload: QueueJobPayload) => Promise<void>;
-type WebhookInlineProcessor = (payload: WebhookJobPayload) => Promise<void>;
 
 @Injectable()
 export class QueueService implements OnModuleDestroy {
@@ -26,9 +16,7 @@ export class QueueService implements OnModuleDestroy {
   private readonly queueMode: 'bullmq' | 'inline';
   private readonly connection?: Redis;
   private readonly queue?: Queue<QueueJobPayload>;
-  private readonly webhookQueue?: Queue<WebhookJobPayload>;
   private inlineProcessor?: InlineProcessor;
-  private webhookInlineProcessor?: WebhookInlineProcessor;
 
   constructor(
     private readonly configService: ConfigService,
@@ -64,28 +52,14 @@ export class QueueService implements OnModuleDestroy {
           maxRetriesPerRequest: null,
         });
 
-    const defaultJobOptions = {
-      attempts: 5,
-      backoff: {
-        type: 'exponential' as const,
-        delay: 5_000,
-      },
-      removeOnComplete: 100,
-      removeOnFail: 200,
-    };
-
     this.queue = new Queue<QueueJobPayload>(this.queueName, {
       connection: this.connection,
       defaultJobOptions: {
-        ...defaultJobOptions,
         attempts: 3,
         backoff: { type: 'exponential', delay: 10_000 },
+        removeOnComplete: 100,
+        removeOnFail: 200,
       },
-    });
-
-    this.webhookQueue = new Queue<WebhookJobPayload>(WEBHOOK_QUEUE_NAME, {
-      connection: this.connection,
-      defaultJobOptions,
     });
 
     this.logger.log(`BullMQ queues ready (Redis ${redisHost ?? redisUrl}).`);
@@ -97,10 +71,6 @@ export class QueueService implements OnModuleDestroy {
 
   setInlineProcessor(processor: InlineProcessor) {
     this.inlineProcessor = processor;
-  }
-
-  setWebhookInlineProcessor(processor: WebhookInlineProcessor) {
-    this.webhookInlineProcessor = processor;
   }
 
   async enqueueInvoiceSubmission(invoiceId: number) {
@@ -125,35 +95,12 @@ export class QueueService implements OnModuleDestroy {
     });
   }
 
-  async enqueueWebhookDelivery(deliveryId: string) {
-    const payload = { deliveryId };
-
-    if (this.queueMode === 'inline') {
-      if (!this.webhookInlineProcessor) {
-        throw new Error('Inline webhook processor is not registered.');
-      }
-
-      setImmediate(() => {
-        void this.webhookInlineProcessor?.(payload).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error(`Inline webhook job failed: ${message}`);
-        });
-      });
-      return;
-    }
-
-    await this.webhookQueue?.add(WEBHOOK_DELIVERY_JOB, payload, {
-      jobId: `webhook-${deliveryId}`,
-    });
-  }
-
   getConnection() {
     return this.connection;
   }
 
   async onModuleDestroy() {
     await this.queue?.close();
-    await this.webhookQueue?.close();
     await this.connection?.quit();
   }
 }

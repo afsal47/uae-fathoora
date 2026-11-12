@@ -34,7 +34,6 @@ export class TenantsService {
           aspProvider: dto.aspProvider.trim().toUpperCase(),
           aspBaseUrl: dto.aspBaseUrl,
           aspApiKey: this.secrets.encrypt(dto.aspApiKey) ?? null,
-          aspWebhookToken: this.secrets.encrypt(dto.aspWebhookToken) ?? null,
         },
         include: { integrations: true },
       });
@@ -114,10 +113,6 @@ export class TenantsService {
           dto.aspApiKey !== undefined
             ? this.secrets.encrypt(dto.aspApiKey)
             : undefined,
-        aspWebhookToken:
-          dto.aspWebhookToken !== undefined
-            ? this.secrets.encrypt(dto.aspWebhookToken)
-            : undefined,
         isActive: dto.isActive,
       },
       include: { integrations: true },
@@ -129,11 +124,9 @@ export class TenantsService {
   private maskTenant<
     T extends {
       aspApiKey?: string | null;
-      aspWebhookToken?: string | null;
       integrations?: Array<{
         apiKey: string;
         apiSecret: string;
-        webhookSecret?: string | null;
       }>;
     },
   >(tenant: T) {
@@ -142,16 +135,10 @@ export class TenantsService {
       aspApiKey: tenant.aspApiKey
         ? this.secrets.mask(tenant.aspApiKey, 6)
         : null,
-      aspWebhookToken: tenant.aspWebhookToken
-        ? this.secrets.mask(tenant.aspWebhookToken, 6)
-        : null,
       integrations: tenant.integrations?.map((i) => ({
         ...i,
         apiKey: this.secrets.mask(i.apiKey, 12) ?? i.apiKey,
         apiSecret: this.secrets.mask(i.apiSecret, 8) ?? '****',
-        webhookSecret: i.webhookSecret
-          ? this.secrets.mask(i.webhookSecret, 8)
-          : null,
       })),
     };
   }

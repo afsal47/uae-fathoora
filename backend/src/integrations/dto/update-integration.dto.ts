@@ -16,18 +16,6 @@ export class UpdateIntegrationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  webhookUrl?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  webhookSecret?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   @MaxLength(1000)
   allowedIpRanges?: string;
 
