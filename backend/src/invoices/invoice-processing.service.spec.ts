@@ -1,4 +1,3 @@
-import { UnauthorizedException } from '@nestjs/common';
 import { InvoiceProcessingService } from './invoice-processing.service';
 
 describe('InvoiceProcessingService', () => {
@@ -32,19 +31,9 @@ describe('InvoiceProcessingService', () => {
     };
     const adapter = {
       submitInvoice: jest.fn(),
-      parseWebhook: jest.fn(),
     };
     const aspProviderResolver = {
       resolve: jest.fn().mockReturnValue(adapter),
-    };
-
-    const outboundWebhook = {
-      enqueueStatusWebhook: jest.fn().mockResolvedValue(undefined),
-      notify: jest.fn().mockResolvedValue(undefined),
-    };
-    const secrets = {
-      decrypt: jest.fn((value: string) => value),
-      encrypt: jest.fn((value: string) => value),
     };
 
     return {
@@ -52,15 +41,11 @@ describe('InvoiceProcessingService', () => {
         prisma as never,
         queueService as never,
         aspProviderResolver as never,
-        outboundWebhook as never,
-        secrets as never,
       ),
       prisma,
       queueService,
       adapter,
       aspProviderResolver,
-      outboundWebhook,
-      secrets,
     };
   }
 
@@ -146,57 +131,5 @@ describe('InvoiceProcessingService', () => {
     expect(queueService.enqueueInvoiceSubmission).not.toHaveBeenCalled();
     expect(service.processSubmission).toHaveBeenCalledWith('invoice-1');
     expect(invoice).toBe(submitted);
-  });
-
-  it('applies webhook status updates when the token matches', async () => {
-    const { service, prisma, adapter } = createService();
-    adapter.parseWebhook.mockResolvedValue({
-      tenantCode: 'CITY_MARINE',
-      invoiceId: 'invoice-1',
-      status: 'ACCEPTED',
-      message: 'Accepted by ASP',
-      rawPayload: { status: 'ACCEPTED' },
-    });
-    prisma.tenant.findFirst.mockResolvedValue({
-      id: 'tenant-1',
-      aspWebhookToken: 'secret-token',
-    });
-    prisma.invoice.findFirst.mockResolvedValue({
-      id: 'invoice-1',
-      status: 'SUBMITTED',
-    });
-    prisma.invoice.update.mockResolvedValue({
-      id: 'invoice-1',
-      status: 'ACCEPTED',
-      lines: [],
-      events: [],
-    });
-
-    const result = await service.handleWebhook(
-      'FAKE',
-      { 'x-webhook-token': 'secret-token' },
-      { status: 'ACCEPTED' },
-    );
-
-    expect(result.status).toBe('ACCEPTED');
-  });
-
-  it('rejects webhooks with an invalid token', async () => {
-    const { service, prisma, adapter } = createService();
-    adapter.parseWebhook.mockResolvedValue({
-      tenantCode: 'CITY_MARINE',
-      invoiceId: 'invoice-1',
-      status: 'REJECTED',
-      message: 'Rejected by ASP',
-      rawPayload: { status: 'REJECTED' },
-    });
-    prisma.tenant.findFirst.mockResolvedValue({
-      id: 'tenant-1',
-      aspWebhookToken: 'secret-token',
-    });
-
-    await expect(
-      service.handleWebhook('FAKE', { 'x-webhook-token': 'bad-token' }, {}),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
