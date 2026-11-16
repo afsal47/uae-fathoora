@@ -4,7 +4,7 @@ This note is for developers joining the project. It explains who talks to whom, 
 
 ## What this system is
 
-UAE-FATHOORA is a multi-tenant e-invoicing hub. A source system (for example IBMS) sends an invoice as JSON. The hub stores it, builds Peppol PINT-AE XML, and posts that XML to the tenant’s Access Point (ASP). The ASP is the service that delivers the invoice onward (Peppol / FTA). The source system learns the result by **polling** Hub status APIs (no webhooks).
+UAE-FATHOORA is a multi-tenant e-invoicing hub. A source system (for example IBMS) sends an invoice as JSON. The hub stores it, builds Peppol PINT-AE XML, and posts that XML to the tenant’s Access Point (ASP). The ASP is the service that delivers the invoice onward (Peppol / FTA). The source system learns the result by **polling** Hub status APIs.
 
 ```
 Source system                Hub                         Access Point

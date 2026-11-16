@@ -24,7 +24,6 @@ model Tenant {
   aspProvider     String        @default("FAKE") @db.NVarChar(50)
   aspBaseUrl      String?       @db.NVarChar(500)
   aspApiKey       String?       @db.NVarChar(500)
-  aspWebhookToken String?       @db.NVarChar(500)
   isActive        Boolean       @default(true)
   /** Next hub Peppol invoice number (inv-N); incremented on each create. */
   invoiceSequence Int           @default(0)
@@ -44,8 +43,6 @@ model Integration {
   authType        String    @default("API_KEY_HMAC") @db.NVarChar(50)
   apiKey          String    @db.NVarChar(200)
   apiSecret       String    @db.NVarChar(500)
-  webhookUrl      String?   @db.NVarChar(500)
-  webhookSecret   String?   @db.NVarChar(500)
   allowedIpRanges String?   @db.NVarChar(1000)
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
@@ -153,22 +150,4 @@ model InvoiceEvent {
 
   @@index([invoiceId, createdAt])
   @@map("invoice_events")
-}
-
-model WebhookDelivery {
-  id            String   @id @default(uuid())
-  integrationId String
-  invoiceId     Int
-  event         String   @db.NVarChar(100)
-  payload       String   @db.NVarChar(Max)
-  status        String   @default("PENDING") @db.NVarChar(50)
-  attempts      Int      @default(0)
-  lastError     String?  @db.NVarChar(2000)
-  responseCode  Int?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([status, createdAt])
-  @@index([invoiceId, createdAt])
-  @@map("webhook_deliveries")
 }
