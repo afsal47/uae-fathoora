@@ -11,7 +11,7 @@ IBMS  ◀─GET  /v1/invoices/.../status─┘         │
 IBMS  ──POST /v1/invoices/:id/asp-retry───────▶│──▶ /peppol/tdd/retry-failed
 ```
 
-Status and retry for IBMS are **poll / request APIs only** (no Hub→IBMS webhooks).  
+Status and retry for IBMS are **poll / request APIs only**.  
 Hub itself **auto-polls ASP** in the background for in-progress invoices and updates Hub status.
 
 ---
@@ -425,5 +425,4 @@ EINVOICE_SOURCE_SYSTEM=IBMS_BROKING
 - Admin Dashboard: `http://localhost:5173`
 - Spec source: Evatra Data Dictionary Excel (Invoice Types / Codes / Calculation Layers)
 
-IBMS status is poll-only (no Hub→IBMS webhooks). Hub auto-syncs from ASP in the background.
-Do not configure source-system webhook callbacks for this hub.
+IBMS status is poll-only. Hub auto-syncs from ASP in the background.
