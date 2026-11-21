@@ -55,7 +55,7 @@ export class InvoiceStatusResponseDto {
 
   @ApiProperty({
     description:
-      'Current processing status. Map to IBMS UI: QUEUED/SUBMITTING/SUBMITTED → Processing; ACCEPTED/COMPLETED → Posted; REJECTED/FAILED → Failed; CANCELLED → Cancelled.',
+      'Current processing status (backward-compatible hub status). Map to IBMS UI: QUEUED/SUBMITTING/SUBMITTED → Processing; ACCEPTED/COMPLETED → Posted; REJECTED/FAILED → Failed; CANCELLED → Cancelled.',
     enum: [
       'DRAFT',
       'QUEUED',
@@ -70,6 +70,34 @@ export class InvoiceStatusResponseDto {
     example: 'COMPLETED',
   })
   status: string;
+
+  @ApiPropertyOptional({
+    description: 'Internal hub processing stage (RECEIVED / VALIDATION_FAILED / QUEUED)',
+    nullable: true,
+  })
+  hubProcessingStatus?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Internal ASP submission stage (PENDING / ACCEPTED / REJECTED / FAILED)',
+    nullable: true,
+  })
+  aspSubmissionStatus?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Internal Peppol delivery stage. Not implied by HTTP 200 or ASP API acceptance.',
+    nullable: true,
+  })
+  peppolDeliveryStatus?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Internal tax reporting stage',
+    nullable: true,
+  })
+  taxReportingStatus?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  providerStatusRaw?: string | null;
 
   @ApiProperty({ example: 1 })
   submissionAttempts: number;

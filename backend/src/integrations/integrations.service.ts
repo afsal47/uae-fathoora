@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateIntegrationDto } from './dto/create-integration.dto';
 import { UpdateIntegrationDto } from './dto/update-integration.dto';
 
+const legalEntityInclude = {
+  legalEntity: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      trn: true,
+      isActive: true,
+    },
+  },
+} as const;
+
 @Injectable()
 export class IntegrationsService {
   constructor(
@@ -19,6 +32,10 @@ export class IntegrationsService {
 
   async create(tenantId: string, dto: CreateIntegrationDto) {
     await this.assertTenantExists(tenantId);
+    const legalEntityId = await this.resolveLegalEntityId(
+      tenantId,
+      dto.legalEntityId,
+    );
 
     const apiKey = `key_${randomBytes(24).toString('hex')}`;
     const apiSecretPlain = `secret_${randomBytes(32).toString('hex')}`;
@@ -32,13 +49,15 @@ export class IntegrationsService {
           authType: dto.authType ?? 'API_KEY_HMAC',
           apiKey,
           apiSecret: this.secrets.encrypt(apiSecretPlain)!,
-          allowedIpRanges: dto.allowedIpRanges,
+          legalEntityId,
         },
+        include: legalEntityInclude,
       });
 
-      // Return plaintext secret once (not stored that way in DB)
+      // Return plaintext key + secret once (list/update responses stay masked)
       return {
-        ...created,
+        ...this.maskSecrets(created),
+        apiKey,
         apiSecret: apiSecretPlain,
       };
     } catch (error) {
@@ -59,6 +78,7 @@ export class IntegrationsService {
 
     const rows = await this.prisma.integration.findMany({
       where: { tenantId },
+      include: legalEntityInclude,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -68,7 +88,10 @@ export class IntegrationsService {
   async findOne(tenantId: string, integrationId: string) {
     const integration = await this.prisma.integration.findFirst({
       where: { id: integrationId, tenantId },
-      include: { _count: { select: { invoices: true } } },
+      include: {
+        ...legalEntityInclude,
+        _count: { select: { invoices: true } },
+      },
     });
 
     if (!integration) {
@@ -87,13 +110,22 @@ export class IntegrationsService {
   ) {
     await this.findOne(tenantId, integrationId);
 
+    let legalEntityId: string | undefined;
+    if (dto.legalEntityId !== undefined) {
+      legalEntityId = await this.resolveLegalEntityId(
+        tenantId,
+        dto.legalEntityId,
+      );
+    }
+
     const updated = await this.prisma.integration.update({
       where: { id: integrationId },
       data: {
         name: dto.name,
-        allowedIpRanges: dto.allowedIpRanges,
         isActive: dto.isActive,
+        ...(legalEntityId !== undefined ? { legalEntityId } : {}),
       },
+      include: legalEntityInclude,
     });
 
     return this.maskSecrets(updated);
@@ -111,12 +143,42 @@ export class IntegrationsService {
         apiKey,
         apiSecret: this.secrets.encrypt(apiSecretPlain)!,
       },
+      include: legalEntityInclude,
     });
 
     return {
-      ...updated,
+      ...this.maskSecrets(updated),
+      apiKey,
       apiSecret: apiSecretPlain,
     };
+  }
+
+  private async resolveLegalEntityId(
+    tenantId: string,
+    legalEntityId?: string,
+  ): Promise<string> {
+    if (legalEntityId?.trim()) {
+      const entity = await this.prisma.legalEntity.findFirst({
+        where: { id: legalEntityId.trim(), tenantId, isActive: true },
+      });
+      if (!entity) {
+        throw new BadRequestException(
+          `Legal entity ${legalEntityId} was not found or is inactive for this tenant.`,
+        );
+      }
+      return entity.id;
+    }
+
+    const fallback = await this.prisma.legalEntity.findFirst({
+      where: { tenantId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!fallback) {
+      throw new BadRequestException(
+        'Create an active legal entity for this tenant before adding a source system.',
+      );
+    }
+    return fallback.id;
   }
 
   private maskSecrets<T extends { apiKey: string; apiSecret: string }>(row: T) {

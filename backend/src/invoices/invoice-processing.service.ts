@@ -9,10 +9,16 @@ import {
 } from '@nestjs/common';
 import { Invoice } from '@prisma/client';
 import { Worker } from 'bullmq';
+import { AspConnectionResolverService } from '../asp/asp-connection-resolver.service';
 import { AspProviderResolverService } from '../asp/asp-provider-resolver.service';
-import { AspSubmissionError } from '../asp/asp.types';
+import {
+  AspRuntimeCredentials,
+  AspSubmissionError,
+  AspProviderAdapter,
+} from '../asp/asp.types';
+import { HUB_PROCESSING_STATUS } from '../asp/status/internal-status';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { QueueJobPayload, QueueService } from '../queue/queue.service';
 import {
   EVENT_TYPE,
   INVOICE_QUEUE_NAME,
@@ -34,18 +40,19 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 @Injectable()
 export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(InvoiceProcessingService.name);
-  private worker?: Worker<{ invoiceId: number }>;
+  private worker?: Worker<QueueJobPayload>;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
     private readonly aspProviderResolver: AspProviderResolverService,
+    private readonly aspConnectionResolver: AspConnectionResolverService,
   ) {}
 
   onModuleInit() {
     if (this.queueService.mode === 'inline') {
-      this.queueService.setInlineProcessor(async ({ invoiceId }) => {
-        await this.processSubmission(invoiceId);
+      this.queueService.setInlineProcessor(async (payload) => {
+        await this.processSubmission(payload.invoiceId, payload);
       });
       return;
     }
@@ -62,7 +69,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
-        await this.processSubmission(job.data.invoiceId);
+        await this.processSubmission(job.data.invoiceId, job.data);
       },
       {
         connection,
@@ -75,18 +82,29 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async processSubmission(invoiceId: number) {
+  async processSubmission(invoiceId: number, job?: QueueJobPayload) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
         tenant: true,
         integration: true,
         lines: true,
+        legalEntity: true,
+        aspConnection: {
+          include: { aspProvider: true, credentials: true },
+        },
       },
     });
 
     if (!invoice) {
       throw new NotFoundException(`Invoice ${invoiceId} was not found.`);
+    }
+
+    // Revalidate ownership from queue payload when present (tenant isolation).
+    if (job?.tenantId && job.tenantId !== invoice.tenantId) {
+      throw new BadRequestException(
+        `Queue job tenant mismatch for invoice ${invoiceId}.`,
+      );
     }
 
     if (
@@ -100,6 +118,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       where: { id: invoice.id },
       data: {
         status: INVOICE_STATUS.SUBMITTING,
+        hubProcessingStatus: HUB_PROCESSING_STATUS.QUEUED,
         submissionAttempts: { increment: 1 },
         lastSubmissionAt: new Date(),
         lastSubmissionError: null,
@@ -119,7 +138,8 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     let passthroughDto: CreateInvoiceDto | undefined;
 
     try {
-      const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
+      const { provider, runtime, connectionId, legalEntityId } =
+        await this.resolveAdapterForInvoice(invoice);
 
       if (aspPayload) {
         try {
@@ -168,16 +188,30 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         tenant: invoice.tenant,
         integration: invoice.integration,
         invoice,
+        runtime,
         createInvoiceDto: passthroughDto,
       });
       const statusData = this.buildStatusUpdate(result.status, result.rejectionReason);
+      const normalized = result.normalized;
 
       const updated = await this.prisma.invoice.update({
         where: { id: invoice.id },
         data: {
           status: result.status,
+          legalEntityId: legalEntityId || invoice.legalEntityId,
+          aspConnectionId: connectionId.startsWith('legacy:')
+            ? invoice.aspConnectionId
+            : connectionId,
           aspMessageId: result.aspMessageId,
           aspReferenceId: result.aspReferenceId,
+          hubProcessingStatus:
+            normalized?.hubProcessingStatus ?? HUB_PROCESSING_STATUS.QUEUED,
+          aspSubmissionStatus: normalized?.aspSubmissionStatus ?? null,
+          peppolDeliveryStatus: normalized?.peppolDeliveryStatus ?? null,
+          taxReportingStatus: normalized?.taxReportingStatus ?? null,
+          providerStatusRaw: normalized?.providerStatusRaw ?? null,
+          providerResponseCode: normalized?.providerResponseCode ?? null,
+          providerErrorMessage: normalized?.providerErrorMessage ?? null,
           // Keep source pass-through (incl. documentUuid); attach submission
           aspPayload: mergeSubmissionIntoAspPayload(
             aspPayload,
@@ -194,7 +228,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
               type: EVENT_TYPE.SUBMISSION_SUCCEEDED,
               fromStatus: INVOICE_STATUS.SUBMITTING,
               toStatus: result.status,
-              message: `Invoice submitted to ASP provider ${invoice.tenant.aspProvider}.`,
+              message: `Invoice submitted to ASP provider ${runtime.providerCode}.`,
             },
           },
         },
@@ -219,7 +253,9 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         where: { id: invoice.id },
         data: {
           status: INVOICE_STATUS.FAILED,
+          aspSubmissionStatus: 'FAILED',
           lastSubmissionError: message.slice(0, 2000),
+          providerErrorMessage: message.slice(0, 2000),
           aspResponse,
           // Persist minted documentUuid so retries reuse the same cbc:UUID
           ...(aspPayload && aspPayload !== invoice.aspPayload
@@ -265,9 +301,16 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
+    const jobPayload: QueueJobPayload = {
+      invoiceId,
+      tenantId: invoice.tenantId,
+      legalEntityId: invoice.legalEntityId,
+      aspConnectionId: invoice.aspConnectionId,
+    };
+
     if (this.queueService.mode === 'inline') {
       try {
-        return await this.processSubmission(invoiceId);
+        return await this.processSubmission(invoiceId, jobPayload);
       } catch {
         return this.prisma.invoice.findUnique({
           where: { id: invoiceId },
@@ -281,7 +324,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    await this.queueService.enqueueInvoiceSubmission(invoiceId);
+    await this.queueService.enqueueInvoiceSubmission(jobPayload);
 
     return this.prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -305,6 +348,10 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         tenant: true,
         integration: true,
         lines: true,
+        legalEntity: true,
+        aspConnection: {
+          include: { aspProvider: true, credentials: true },
+        },
         events: {
           orderBy: { createdAt: 'asc' },
         },
@@ -322,10 +369,10 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
+    const { provider, runtime } = await this.resolveAdapterForInvoice(invoice);
 
     try {
-      const result = await provider.getDocumentStatus(invoice.tenant, trackingId);
+      const result = await provider.getDocumentStatus(runtime, trackingId);
       const nextMessageId = result.trackingId || invoice.aspMessageId;
       const nextReferenceId = result.trackingId || invoice.aspReferenceId;
       const nextRejection = result.rejectionReason ?? null;
@@ -369,6 +416,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       }
 
       const statusData = this.buildStatusUpdate(result.status, result.rejectionReason);
+      const normalized = result.normalized;
 
       const updated = await this.prisma.invoice.update({
         where: { id: invoice.id },
@@ -381,6 +429,11 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
           cancelledAt: statusData.cancelledAt,
           rejectionReason: nextRejection,
           lastSubmissionError: null,
+          aspSubmissionStatus: normalized?.aspSubmissionStatus ?? undefined,
+          peppolDeliveryStatus: normalized?.peppolDeliveryStatus ?? undefined,
+          taxReportingStatus: normalized?.taxReportingStatus ?? undefined,
+          providerStatusRaw: normalized?.providerStatusRaw ?? undefined,
+          providerErrorMessage: normalized?.providerErrorMessage ?? undefined,
           aspResponse: enrichedAspResponseJson,
           events: {
             create: {
@@ -440,6 +493,10 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       where: { id: invoiceId },
       include: {
         tenant: true,
+        legalEntity: true,
+        aspConnection: {
+          include: { aspProvider: true, credentials: true },
+        },
         events: {
           orderBy: { createdAt: 'desc' },
           take: 20,
@@ -459,7 +516,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const provider = this.aspProviderResolver.resolve(invoice.tenant.aspProvider);
+    const { provider, runtime } = await this.resolveAdapterForInvoice(invoice);
 
     let companyId =
       this.readAspCompanyId(invoice.aspResponse) ||
@@ -474,7 +531,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
     // Recover companyId / invoiceId from ASP document-status when aspResponse lost them.
     if (!companyId || !aspInvoiceId) {
       try {
-        const status = await provider.getDocumentStatus(invoice.tenant, trackingId);
+        const status = await provider.getDocumentStatus(runtime, trackingId);
         companyId =
           companyId ||
           status.companyId ||
@@ -521,7 +578,7 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const retry = await provider.retryTddFailed(
-        invoice.tenant,
+        runtime,
         aspInvoiceId,
         companyId,
       );
@@ -598,6 +655,88 @@ export class InvoiceProcessingService implements OnModuleInit, OnModuleDestroy {
         });
       }
 
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve adapter from the invoice's ASP connection (preferred) or legacy tenant fields.
+   * Provider code is never taken from the invoice request body.
+   */
+  private async resolveAdapterForInvoice(invoice: {
+    id: number;
+    tenantId: string;
+    legalEntityId?: string | null;
+    aspConnectionId?: string | null;
+    tenant: Invoice extends never ? never : import('@prisma/client').Tenant;
+    aspConnection?:
+      | (import('@prisma/client').AspConnection & {
+          aspProvider: import('@prisma/client').AspProvider;
+          credentials: import('@prisma/client').AspCredential[];
+        })
+      | null;
+  }): Promise<{
+    provider: AspProviderAdapter;
+    runtime: AspRuntimeCredentials;
+    connectionId: string;
+    legalEntityId: string;
+  }> {
+    let legalEntityId = invoice.legalEntityId ?? '';
+    if (!legalEntityId) {
+      legalEntityId = await this.aspConnectionResolver.resolveDefaultLegalEntityId(
+        invoice.tenantId,
+      );
+    }
+
+    try {
+      const connection =
+        invoice.aspConnection &&
+        invoice.aspConnection.tenantId === invoice.tenantId
+          ? invoice.aspConnection
+          : await this.aspConnectionResolver.resolveForLegalEntity({
+              tenantId: invoice.tenantId,
+              legalEntityId,
+              connectionId: invoice.aspConnectionId,
+            });
+
+      if (connection.tenantId !== invoice.tenantId) {
+        throw new BadRequestException(
+          `ASP connection does not belong to invoice tenant ${invoice.tenantId}.`,
+        );
+      }
+
+      const runtime = await this.aspConnectionResolver.toRuntimeWithApiConfig(
+        connection,
+        invoice.tenant,
+      );
+      const provider = this.aspProviderResolver.resolve(runtime.providerCode);
+      return {
+        provider,
+        runtime,
+        connectionId: connection.id,
+        legalEntityId: connection.legalEntityId,
+      };
+    } catch (error) {
+      // Opt-in only. Prefer AspConnection; do not silently use tenant.asp* in production.
+      if (
+        process.env.ENABLE_LEGACY_TENANT_ASP === 'true' &&
+        invoice.tenant.aspBaseUrl?.trim()
+      ) {
+        const runtime = this.aspConnectionResolver.legacyTenantRuntime(
+          invoice.tenant,
+        );
+        runtime.legalEntityId = legalEntityId;
+        const provider = this.aspProviderResolver.resolve(runtime.providerCode);
+        this.logger.warn(
+          `Invoice ${invoice.id} using legacy tenant ASP fields; migrate to AspConnection.`,
+        );
+        return {
+          provider,
+          runtime,
+          connectionId: runtime.connectionId,
+          legalEntityId,
+        };
+      }
       throw error;
     }
   }

@@ -9,20 +9,16 @@ datasource db {
 }
 
 model Tenant {
-  id              String        @id @default(uuid())
+  id              String        @id @default(uuid()) @db.NVarChar(250)
   code            String        @unique @db.NVarChar(100)
   name            String        @db.NVarChar(200)
   trn             String?       @db.NVarChar(50)
   email           String?       @db.NVarChar(200)
-  phone           String?       @db.NVarChar(50)
-  addressLine1    String?       @db.NVarChar(200)
-  addressLine2    String?       @db.NVarChar(200)
-  city            String?       @db.NVarChar(100)
-  state           String?       @db.NVarChar(100)
-  postalCode      String?       @db.NVarChar(50)
-  countryCode     String        @default("AE") @db.NVarChar(2)
-  aspProvider     String        @default("FAKE") @db.NVarChar(50)
+  /** @deprecated Prefer AspConnection via LegalEntity. Kept for migration compatibility. */
+  aspProvider     String        @db.NVarChar(50)
+  /** @deprecated Prefer AspConnection / AspProviderApiConfig. */
   aspBaseUrl      String?       @db.NVarChar(500)
+  /** @deprecated Prefer AspCredential on AspConnection. */
   aspApiKey       String?       @db.NVarChar(500)
   isActive        Boolean       @default(true)
   /** Next hub Peppol invoice number (inv-N); incremented on each create. */
@@ -31,34 +27,132 @@ model Tenant {
   updatedAt       DateTime      @updatedAt
   integrations    Integration[]
   invoices        Invoice[]
+  legalEntities   LegalEntity[]
+  aspConnections  AspConnection[]
 
   @@map("tenants")
 }
 
 model Integration {
-  id              String    @id @default(uuid())
-  tenantId        String
+  id              String    @id @default(uuid()) @db.NVarChar(250)
+  tenantId        String    @db.NVarChar(250)
   code            String    @db.NVarChar(100)
   name            String    @db.NVarChar(200)
   authType        String    @default("API_KEY_HMAC") @db.NVarChar(50)
   apiKey          String    @db.NVarChar(200)
   apiSecret       String    @db.NVarChar(500)
-  allowedIpRanges String?   @db.NVarChar(1000)
+  /** Optional default legal entity for this integration. */
+  legalEntityId   String?   @db.NVarChar(250)
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  legalEntity     LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   invoices        Invoice[]
 
   @@unique([tenantId, code])
   @@map("integrations")
 }
 
+model LegalEntity {
+  id           String          @id @default(uuid()) @db.NVarChar(250)
+  tenantId     String          @db.NVarChar(250)
+  code         String          @db.NVarChar(100)
+  name         String          @db.NVarChar(200)
+  trn          String?         @db.NVarChar(50)
+  email        String?         @db.NVarChar(200)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  integrations Integration[]
+  aspConnections AspConnection[]
+  invoices     Invoice[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+  @@map("legal_entities")
+}
+
+/** ASP Provider Master — no customer credentials. */
+model AspProvider {
+  id                     String                @id @default(uuid()) @db.NVarChar(250)
+  code                   String                @unique @db.NVarChar(50)
+  name                   String                @db.NVarChar(200)
+  status                 String                @default("INACTIVE") @db.NVarChar(20)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  apiConfigs             AspProviderApiConfig[]
+  connections            AspConnection[]
+
+  @@map("asp_providers")
+}
+
+/** ASP API endpoint config per environment (paths used by adapters). */
+model AspProviderApiConfig {
+  id                String      @id @default(uuid()) @db.NVarChar(250)
+  aspProviderId     String      @db.NVarChar(250)
+  environment       String      @db.NVarChar(20)
+  baseUrl           String?     @db.NVarChar(500)
+  loginPath         String?     @db.NVarChar(500)
+  invoiceSubmitPath String?     @db.NVarChar(500)
+  statusPath        String?     @db.NVarChar(500)
+  timeoutMs         Int         @default(30000)
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  aspProvider       AspProvider @relation(fields: [aspProviderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([aspProviderId, environment])
+  @@map("asp_provider_api_configs")
+}
+
+/**
+ * ASP connection for a legal entity.
+ * Business rule: at most one ACTIVE connection per (legalEntityId, environment).
+ */
+model AspConnection {
+  id               String          @id @default(uuid()) @db.NVarChar(250)
+  tenantId         String          @db.NVarChar(250)
+  legalEntityId    String          @db.NVarChar(250)
+  aspProviderId    String          @db.NVarChar(250)
+  environment      String          @db.NVarChar(20)
+  status           String          @default("INACTIVE") @db.NVarChar(20)
+  lastTestAt       DateTime?
+  lastTestStatus   String?         @db.NVarChar(50)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  legalEntity      LegalEntity     @relation(fields: [legalEntityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aspProvider      AspProvider     @relation(fields: [aspProviderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  credentials      AspCredential[]
+  invoices         Invoice[]
+
+  @@index([tenantId, status])
+  @@index([legalEntityId, environment, status])
+  @@map("asp_connections")
+}
+
+model AspCredential {
+  id              String        @id @default(uuid()) @db.NVarChar(250)
+  aspConnectionId String        @db.NVarChar(250)
+  key             String        @db.NVarChar(100)
+  valueEncrypted  String        @db.NVarChar(Max)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  aspConnection   AspConnection @relation(fields: [aspConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([aspConnectionId, key])
+  @@map("asp_credentials")
+}
+
 model Invoice {
   /** Hub numeric primary key (auto-increment). */
   id                   Int            @id @default(autoincrement())
-  tenantId             String
-  integrationId        String
+  tenantId             String         @db.NVarChar(250)
+  integrationId        String         @db.NVarChar(250)
+  legalEntityId        String?        @db.NVarChar(250)
+  aspConnectionId      String?        @db.NVarChar(250)
   sourceSystem         String         @db.NVarChar(100)
   sourceDocumentId     String         @db.NVarChar(100)
   idempotencyKey       String         @db.NVarChar(200)
@@ -67,7 +161,16 @@ model Invoice {
   /** Source-system document / DCNote number (IBMS), e.g. 119 */
   sourceSystemDCNoteId String?        @db.NVarChar(100)
   documentType         String         @db.NVarChar(50)
+  /** Hub-facing status (backward-compatible public API). */
   status               String         @default("DRAFT") @db.NVarChar(50)
+  /** Layered internal statuses (provider-independent). */
+  hubProcessingStatus  String?        @db.NVarChar(50)
+  aspSubmissionStatus  String?        @db.NVarChar(50)
+  peppolDeliveryStatus String?        @db.NVarChar(50)
+  taxReportingStatus   String?        @db.NVarChar(50)
+  providerStatusRaw    String?        @db.NVarChar(100)
+  providerResponseCode String?        @db.NVarChar(50)
+  providerErrorMessage String?        @db.NVarChar(2000)
   issueDate            DateTime
   currencyCode         String         @default("AED") @db.NVarChar(3)
   sellerName           String         @db.NVarChar(200)
@@ -106,6 +209,8 @@ model Invoice {
   updatedAt            DateTime       @updatedAt
   tenant               Tenant         @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   integration          Integration    @relation(fields: [integrationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  legalEntity          LegalEntity?   @relation(fields: [legalEntityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aspConnection        AspConnection? @relation(fields: [aspConnectionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lines                InvoiceLine[]
   events               InvoiceEvent[]
 
@@ -114,11 +219,12 @@ model Invoice {
   @@unique([tenantId, invoiceNumber, documentType])
   @@index([tenantId, status])
   @@index([integrationId, sourceDocumentId])
+  @@index([legalEntityId, status])
   @@map("invoices")
 }
 
 model InvoiceLine {
-  id          String   @id @default(uuid())
+  id          String   @id @default(uuid()) @db.NVarChar(250)
   invoiceId   Int
   lineNumber  Int
   description String   @db.NVarChar(500)
@@ -138,7 +244,7 @@ model InvoiceLine {
 }
 
 model InvoiceEvent {
-  id         String   @id @default(uuid())
+  id         String   @id @default(uuid()) @db.NVarChar(250)
   invoiceId  Int
   type       String   @db.NVarChar(50)
   fromStatus String?  @db.NVarChar(50)

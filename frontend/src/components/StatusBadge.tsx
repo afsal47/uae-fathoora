@@ -12,5 +12,10 @@ const colors: Record<string, string> = {
 
 export default function StatusBadge({ status }: { status: string }) {
   const cls = colors[status] ?? 'badge-neutral';
-  return <span className={`badge ${cls}`}>{status}</span>;
+  const label = status
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+  return <span className={`badge ${cls}`}>{label}</span>;
 }

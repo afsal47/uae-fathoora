@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { AspSubmissionContext } from './asp.types';
+import { PintBuildContext } from './asp.types';
 
 /** RFC 4122 UUID used for PINT AE BTAE-07 (cbc:UUID). */
 const UUID_RE =
@@ -240,7 +240,7 @@ export function normalizeLegalRegistration(
   return hasId || resolved.registrationType ? resolved : undefined;
 }
 
-export function buildPintAePayload(context: AspSubmissionContext): PintAeInvoice {
+export function buildPintAePayload(context: PintBuildContext): PintAeInvoice {
   const { invoice } = context;
   const dto = context.createInvoiceDto;
 

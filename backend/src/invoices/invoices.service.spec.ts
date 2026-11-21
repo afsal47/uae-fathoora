@@ -88,11 +88,21 @@ describe('InvoicesService', () => {
     const queueService = {
       enqueueInvoiceSubmission: jest.fn().mockResolvedValue(undefined),
     };
+    const aspConnectionResolver = {
+      resolveDefaultLegalEntityId: jest.fn().mockResolvedValue('le-1'),
+      resolveLegalEntityIdForInvoice: jest.fn().mockResolvedValue('le-1'),
+      resolveForLegalEntity: jest.fn().mockResolvedValue({ id: 'conn-1' }),
+    };
 
     return {
-      service: new InvoicesService(prisma as never, queueService as never),
+      service: new InvoicesService(
+        prisma as never,
+        queueService as never,
+        aspConnectionResolver as never,
+      ),
       prisma,
       queueService,
+      aspConnectionResolver,
     };
   }
 
@@ -131,7 +141,7 @@ describe('InvoicesService', () => {
     expect(Number(createArg.data.lines.create[0].taxAmount)).toBe(5);
     expect(Number(createArg.data.lines.create[0].totalAmount)).toBe(105);
 
-    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: 'invoice-1', tenantId: 'tenant-1' }));
     expect(invoice.status).toBe('QUEUED');
   });
 
@@ -159,7 +169,7 @@ describe('InvoicesService', () => {
       currencyCode: 'USD',
     });
 
-    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: 'invoice-1', tenantId: 'tenant-1' }));
     expect(invoice.status).toBe('QUEUED');
   });
 
@@ -174,7 +184,7 @@ describe('InvoicesService', () => {
       taxInclusiveAmountInAed: 367.25,
     });
 
-    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: 'invoice-1', tenantId: 'tenant-1' }));
     expect(invoice.status).toBe('QUEUED');
   });
 
@@ -248,7 +258,7 @@ describe('InvoicesService', () => {
       buyer: { name: 'Buyer' },
     });
 
-    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith('invoice-1');
+    expect(queueService.enqueueInvoiceSubmission).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: 'invoice-1', tenantId: 'tenant-1' }));
     expect(invoice.status).toBe('QUEUED');
   });
 

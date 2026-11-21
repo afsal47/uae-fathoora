@@ -1,7 +1,7 @@
-# E-Invoice Hub — IBMS Integration Guide
+# E-Invoice Hub — Source System Integration Guide
 
 > Based on **Evatra UAE E-Invoicing Data Dictionary** (`Evatra Data NEW FILE 13-AUG-2026.xlsx`).  
-> IBMS sends **JSON** (not Excel). The Hub applies Excel rules and builds Peppol PINT-AE XML.
+> Source systems (for example IBMS) send **JSON** (not Excel). The Hub applies Excel rules and builds Peppol PINT-AE XML.
 
 ## Overview
 
@@ -24,8 +24,9 @@ Hub itself **auto-polls ASP** in the background for in-progress invoices and upd
 | `API_SECRET` | `secret_x9y8...` | HMAC `x-signature` |
 | `tenantCode` | `CITY_MARINE` | Body (must match API key tenant) |
 | `sourceSystem` | `IBMS_BROKING` | Body (must match integration code) |
+| `legalEntityCode` | `CM_DXB` | Optional body field. Selects legal entity / ASP. If omitted, Hub uses the integration’s linked legal entity. |
 
-Store in IBMS `.env` — never hardcode.
+Store in IBMS `.env` — never hardcode. For Dubai + India from one ERP, either use two integrations or pass `legalEntityCode` per invoice.
 
 ---
 
@@ -148,6 +149,7 @@ x-signature: ...
 {
   "tenantCode": "CITY_MARINE",
   "sourceSystem": "IBMS_BROKING",
+  "legalEntityCode": "CM_DXB",
   "idempotencyKey": "BROKING-COMM-100245",
   "documentType": "TAX_INVOICE",
   "invoiceNumber": "INV-100245",

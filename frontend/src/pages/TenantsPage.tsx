@@ -1,7 +1,13 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Building, Pencil, Plus, RefreshCw, Search } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 import Modal from '../components/Modal';
-import { tenantApi, type Tenant } from '../lib/api';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import {
+  legalEntityApi,
+  tenantApi,
+  type Tenant,
+} from '../lib/api';
 
 const inputClass = 'input';
 
@@ -34,71 +40,51 @@ function Field({
   );
 }
 
-function AspFields({
-  tenant,
-  mode,
-}: {
-  tenant?: Tenant | null;
-  mode: 'create' | 'edit';
-}) {
-  return (
-    <div className="form-section">
-      <h3 className="form-section-title">ASP configuration</h3>
-      <p className="field-hint mb-4">
-        Access Point used for Peppol and FTA submission.
-        {mode === 'edit' && ' Leave the API key blank to keep the current value.'}
-      </p>
-      <div className="form-grid form-grid-2">
-        <Field label="ASP Provider *">
-          <input
-            name="aspProvider"
-            required
-            defaultValue={tenant?.aspProvider ?? ''}
-            placeholder="Provider name"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="ASP Base URL">
-          <input
-            name="aspBaseUrl"
-            type="url"
-            defaultValue={tenant?.aspBaseUrl ?? ''}
-            placeholder="https://"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="ASP API Key">
-          <input
-            name="aspApiKey"
-            type="password"
-            autoComplete="new-password"
-            readOnly
-            onFocus={unlockOnFocus}
-            placeholder={
-              mode === 'edit' && tenant?.aspApiKey
-                ? `Current: ${tenant.aspApiKey}`
-                : 'ASP API key'
-            }
-            className={inputClass}
-          />
-        </Field>
-      </div>
-    </div>
-  );
-}
-
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [legalEntitiesTenant, setLegalEntitiesTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState('');
+  const [legalEntityError, setLegalEntityError] = useState('');
+  const { ask, confirmProps } = useConfirmAction();
 
-  const load = () => {
-    tenantApi.list().then(setTenants).catch(() => {}).finally(() => setLoading(false));
+  const load = (mode: 'silent' | 'refresh' = 'silent') => {
+    if (mode === 'refresh') setRefreshing(true);
+    tenantApi
+      .list()
+      .then(setTenants)
+      .catch(() => {})
+      .finally(() => {
+        setLoading(false);
+        if (mode === 'refresh') setRefreshing(false);
+      });
   };
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
+
+  const applySearch = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setSearchQuery(searchInput.trim());
+  };
+
+  const filteredTenants = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tenants;
+    return tenants.filter((t) => {
+      const haystack = [t.code, t.name, t.trn, t.email]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [tenants, searchQuery]);
 
   const openCreate = () => {
     setEditingTenant(null);
@@ -122,7 +108,19 @@ export default function TenantsPage() {
     setError('');
   };
 
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
+  const openLegalEntities = (tenant: Tenant) => {
+    setShowForm(false);
+    setEditingTenant(null);
+    setLegalEntityError('');
+    setLegalEntitiesTenant(tenant);
+  };
+
+  const closeLegalEntities = () => {
+    setLegalEntitiesTenant(null);
+    setLegalEntityError('');
+  };
+
+  const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     const fd = new FormData(e.currentTarget);
@@ -131,16 +129,25 @@ export default function TenantsPage() {
       if (typeof v === 'string' && v.trim()) data[k] = v.trim();
     });
 
-    try {
-      await tenantApi.create(data);
-      setShowForm(false);
-      load();
-    } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Failed to create tenant');
-    }
+    ask(
+      {
+        title: 'Create tenant?',
+        description: 'Are you sure you want to create this tenant?',
+        confirmLabel: 'Create tenant',
+      },
+      async () => {
+        try {
+          await tenantApi.create(data);
+          setShowForm(false);
+          load();
+        } catch (err: any) {
+          setError(err.response?.data?.message ?? 'Failed to create tenant');
+        }
+      },
+    );
   };
 
-  const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingTenant) return;
     setError('');
@@ -154,13 +161,53 @@ export default function TenantsPage() {
     }
     data.isActive = fd.get('isActive') === 'on';
 
-    try {
-      await tenantApi.update(editingTenant.id, data);
-      setEditingTenant(null);
-      load();
-    } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Failed to update tenant');
-    }
+    ask(
+      {
+        title: 'Save tenant changes?',
+        description: 'Are you sure you want to save these changes?',
+        confirmLabel: 'Save changes',
+      },
+      async () => {
+        try {
+          await tenantApi.update(editingTenant.id, data);
+          setEditingTenant(null);
+          load();
+        } catch (err: any) {
+          setError(err.response?.data?.message ?? 'Failed to update tenant');
+        }
+      },
+    );
+  };
+
+  const handleSaveLegalEntity = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!legalEntitiesTenant) return;
+    setLegalEntityError('');
+    const fd = new FormData(e.currentTarget);
+    const data = {
+      code: String(fd.get('code') ?? '').trim(),
+      name: String(fd.get('name') ?? '').trim(),
+      trn: String(fd.get('trn') ?? '').trim() || undefined,
+      email: String(fd.get('email') ?? '').trim() || undefined,
+      isActive: fd.get('isActive') === 'on',
+    };
+
+    ask(
+      {
+        title: 'Create legal entity?',
+        description: 'Are you sure you want to create this legal entity?',
+        confirmLabel: 'Create legal entity',
+      },
+      async () => {
+        try {
+          await legalEntityApi.create(legalEntitiesTenant.id, data);
+          closeLegalEntities();
+        } catch (err: any) {
+          const message = err.response?.data?.message ?? 'Failed to create legal entity';
+          setLegalEntityError(Array.isArray(message) ? message.join(', ') : message);
+        }
+      },
+    );
   };
 
   if (loading) return <div className="loading-state">Loading…</div>;
@@ -170,7 +217,6 @@ export default function TenantsPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Tenants</h1>
-          <p className="page-subtitle">Companies and access points connected to the hub.</p>
         </div>
         <button type="button" onClick={openCreate} className="btn btn-primary">
           <Plus size={16} />
@@ -181,7 +227,7 @@ export default function TenantsPage() {
       <Modal
         open={showForm}
         title="Register New Tenant"
-        description="Company details and the access point used for submission."
+        description="Create the company account. Add legal entities and ASP connections next."
         onClose={closeCreate}
       >
         <form onSubmit={handleCreate} autoComplete="off" className="relative">
@@ -209,11 +255,7 @@ export default function TenantsPage() {
                 className={inputClass}
               />
             </Field>
-            <Field label="City">
-              <input name="city" placeholder="City" className={inputClass} />
-            </Field>
           </div>
-          <AspFields mode="create" />
           <div className="form-actions">
             <button type="button" onClick={closeCreate} className="btn btn-ghost">
               Cancel
@@ -228,7 +270,7 @@ export default function TenantsPage() {
       <Modal
         open={editingTenant !== null}
         title="Edit Tenant"
-        description="Update company details and access point credentials."
+        description="Update company details for this tenant."
         onClose={closeEdit}
       >
         {editingTenant && (
@@ -275,13 +317,6 @@ export default function TenantsPage() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="City">
-                <input
-                  name="city"
-                  defaultValue={editingTenant.city ?? ''}
-                  className={inputClass}
-                />
-              </Field>
               <div className="flex items-end pb-2.5">
                 <label className="flex items-center gap-2 text-sm text-[var(--color-ink-muted)] cursor-pointer">
                   <input
@@ -294,7 +329,6 @@ export default function TenantsPage() {
                 </label>
               </div>
             </div>
-            <AspFields mode="edit" tenant={editingTenant} />
             <div className="form-actions">
               <button type="button" onClick={closeEdit} className="btn btn-ghost">
                 Cancel
@@ -307,9 +341,42 @@ export default function TenantsPage() {
         )}
       </Modal>
 
+      <section className="page-filters" aria-label="Tenant filters">
+        <form className="filter-bar" onSubmit={applySearch}>
+          <div className="field filter-bar-search">
+            <label htmlFor="tenant-search" className="field-label">
+              Search
+            </label>
+            <input
+              id="tenant-search"
+              className="input"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Code, name, TRN…"
+            />
+          </div>
+          <div className="filter-bar-actions">
+            <button type="submit" className="btn btn-search">
+              <Search size={14} /> Search
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={refreshing}
+              onClick={() => load('refresh')}
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} />
+              Refresh
+            </button>
+          </div>
+        </form>
+      </section>
+
       <div className="panel">
         {tenants.length === 0 ? (
           <div className="panel-empty">No tenants yet. Create one to get started.</div>
+        ) : filteredTenants.length === 0 ? (
+          <div className="panel-empty">No tenants match your search.</div>
         ) : (
           <div className="data-table-scroll">
             <table className="data-table">
@@ -318,40 +385,42 @@ export default function TenantsPage() {
                   <th>Tenant code</th>
                   <th>Company name</th>
                   <th>TRN</th>
-                  <th>ASP</th>
-                  <th>ASP URL</th>
-                  <th className="!text-center">Integrations</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th className="cell-center">Integrations</th>
+                  <th className="cell-status">Status</th>
+                  <th className="cell-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((t) => (
+                {filteredTenants.map((t) => (
                   <tr key={t.id}>
                     <td className="cell-mono">{t.code}</td>
-                    <td className="cell-strong">{t.name}</td>
+                    <td className="cell-wrap">{t.name}</td>
                     <td className="font-mono text-xs">{t.trn ?? '—'}</td>
-                    <td>
-                      <span className="badge badge-accent">{t.aspProvider}</span>
-                    </td>
-                    <td className="min-w-[12rem] max-w-[28rem] !whitespace-normal text-xs break-all" title={t.aspBaseUrl ?? undefined}>
-                      {t.aspBaseUrl ?? '—'}
-                    </td>
                     <td className="cell-center tabular-nums">{t.integrations?.length ?? 0}</td>
-                    <td>
+                    <td className="cell-status">
                       <span className={`badge ${t.isActive ? 'badge-success' : 'badge-danger'}`}>
                         {t.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(t)}
-                        className="btn-link"
-                        title="Edit tenant"
-                      >
-                        <Pencil size={14} /> Edit
-                      </button>
+                    <td className="cell-actions">
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(t)}
+                          className="btn-link"
+                          title="Edit tenant"
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openLegalEntities(t)}
+                          className="btn-link"
+                          title="Add legal entity"
+                        >
+                          <Building size={14} /> Legal entities
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -360,6 +429,74 @@ export default function TenantsPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={legalEntitiesTenant !== null}
+        title={
+          legalEntitiesTenant
+            ? `Add legal entity — ${legalEntitiesTenant.code}`
+            : 'Add legal entity'
+        }
+        description="Legal entities are the TRN-level businesses under this tenant. ASP connections are assigned per legal entity."
+        onClose={closeLegalEntities}
+      >
+        {legalEntitiesTenant ? (
+          <form
+            key={legalEntitiesTenant.id}
+            onSubmit={handleSaveLegalEntity}
+            className="form-grid form-grid-2"
+          >
+            {legalEntityError ? <p className="alert-error">{legalEntityError}</p> : null}
+            <Field label="Code *">
+              <input name="code" required placeholder="CM_DXB" className={inputClass} />
+            </Field>
+            <Field label="Name *">
+              <input
+                name="name"
+                required
+                placeholder="City Marine Dubai"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="TRN">
+              <input
+                name="trn"
+                placeholder="100111456700003"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                name="email"
+                type="email"
+                placeholder="finance@company.ae"
+                className={inputClass}
+              />
+            </Field>
+            <div className="flex flex-col gap-3 justify-end pb-2.5">
+              <label className="flex items-center gap-2 text-sm text-[var(--color-ink-muted)] cursor-pointer">
+                <input
+                  name="isActive"
+                  type="checkbox"
+                  defaultChecked
+                  className="border-[var(--color-line)] text-[var(--color-brand-600)] focus:ring-[var(--color-brand-500)]"
+                />
+                Active
+              </label>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={closeLegalEntities}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Create legal entity
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <ConfirmModal {...confirmProps} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Eye, RefreshCw } from 'lucide-react';
+import { Eye, RefreshCw, Search } from 'lucide-react';
 import Modal from '../components/Modal';
 import SelectMenu from '../components/SelectMenu';
 import StatusBadge from '../components/StatusBadge';
@@ -711,6 +711,8 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [listRefreshing, setListRefreshing] = useState(false);
   const [tenantFilter, setTenantFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<Invoice | null>(null);
   const [actionBusy, setActionBusy] = useState<'sync' | null>(null);
@@ -740,17 +742,39 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [tenantFilter]);
+  }, [tenantFilter, searchQuery]);
 
   const tenantById = useMemo(
     () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
     [tenants],
   );
 
-  const filteredInvoices = useMemo(
-    () => (tenantFilter ? invoices.filter((inv) => inv.tenantId === tenantFilter) : invoices),
-    [invoices, tenantFilter],
-  );
+  const applySearch = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setSearchQuery(searchInput.trim());
+  };
+
+  const filteredInvoices = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return invoices.filter((inv) => {
+      if (tenantFilter && inv.tenantId !== tenantFilter) return false;
+      if (!q) return true;
+      const tenant = tenantById.get(inv.tenantId);
+      const haystack = [
+        inv.invoiceNumber,
+        inv.sellerName,
+        inv.buyerName,
+        inv.status,
+        inv.currencyCode,
+        tenant?.code,
+        tenant?.name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [invoices, tenantFilter, searchQuery, tenantById]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -815,23 +839,12 @@ export default function InvoicesPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Invoices</h1>
-          <p className="page-subtitle">Submission status, ASP responses, and document detail.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={listRefreshing || refreshingId !== null || actionBusy !== null}
-          onClick={() => void loadList('refresh')}
-          title="Reload invoice list"
-        >
-          <RefreshCw size={16} className={listRefreshing ? 'animate-spin' : undefined} />
-          {listRefreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
       </header>
 
-      <div className="panel panel-fill">
-        <div className="panel-toolbar">
-          <div className="field w-full max-w-sm">
+      <section className="page-filters" aria-label="Invoice filters">
+        <form className="filter-bar" onSubmit={applySearch}>
+          <div className="field filter-bar-tenant">
             <label htmlFor="invoice-tenant-filter" className="field-label">
               Tenant
             </label>
@@ -840,6 +853,7 @@ export default function InvoicesPage() {
               value={tenantFilter}
               onChange={setTenantFilter}
               placeholder="All tenants"
+              labelOnly
               options={[
                 { value: '', label: 'All tenants' },
                 ...tenants.map((tenant) => ({
@@ -850,12 +864,37 @@ export default function InvoicesPage() {
               ]}
             />
           </div>
-          <p className="text-xs text-[var(--color-ink-subtle)]">
-            {filteredInvoices.length} invoice{filteredInvoices.length === 1 ? '' : 's'}
-            {tenantFilter ? ' for selected tenant' : ''}
-          </p>
-        </div>
+          <div className="field filter-bar-search">
+            <label htmlFor="invoice-search" className="field-label">
+              Search
+            </label>
+            <input
+              id="invoice-search"
+              className="input"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Invoice #, seller, buyer…"
+            />
+          </div>
+          <div className="filter-bar-actions">
+            <button type="submit" className="btn btn-search">
+              <Search size={14} /> Search
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={listRefreshing || refreshingId !== null || actionBusy !== null}
+              onClick={() => void loadList('refresh')}
+              title="Reload invoice list"
+            >
+              <RefreshCw size={14} className={listRefreshing ? 'animate-spin' : undefined} />
+              Refresh
+            </button>
+          </div>
+        </form>
+      </section>
 
+      <div className="panel panel-fill">
         {listError && (
           <pre className="mx-5 mt-4 shrink-0 border border-red-200 bg-red-50 px-4 py-3 whitespace-pre-wrap break-words font-sans text-sm text-red-700">
             {listError}
@@ -879,8 +918,8 @@ export default function InvoicesPage() {
                     <th>Seller</th>
                     <th>Buyer</th>
                     <th className="!text-right">Amount</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th className="cell-status">Status</th>
+                    <th className="cell-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -891,16 +930,16 @@ export default function InvoicesPage() {
                       <tr key={inv.id}>
                         <td className="cell-mono">{tenantById.get(inv.tenantId)?.code ?? '—'}</td>
                         <td className="cell-strong">{inv.invoiceNumber}</td>
-                        <td className="max-w-[220px] !whitespace-normal">{inv.sellerName}</td>
-                        <td className="max-w-[220px] !whitespace-normal">{inv.buyerName}</td>
+                        <td className="cell-wrap">{inv.sellerName}</td>
+                        <td className="cell-wrap">{inv.buyerName}</td>
                         <td className="cell-right cell-strong tabular-nums">
                           {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
                         </td>
-                        <td>
+                        <td className="cell-status">
                           <StatusBadge status={inv.status} />
                         </td>
-                        <td>
-                          <div className="flex flex-wrap items-center gap-3">
+                        <td className="cell-actions">
+                          <div className="table-actions">
                             <button
                               type="button"
                               onClick={() => openInvoice(inv)}

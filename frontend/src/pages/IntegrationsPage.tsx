@@ -1,21 +1,35 @@
-import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Copy, Check } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Pencil, Plus, RefreshCw, Copy, Check, Search } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 import Modal from '../components/Modal';
 import SelectMenu from '../components/SelectMenu';
-import { tenantApi, integrationApi, type Tenant, type Integration } from '../lib/api';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import {
+  tenantApi,
+  integrationApi,
+  legalEntityApi,
+  type Tenant,
+  type Integration,
+  type LegalEntity,
+} from '../lib/api';
 
 const inputClass = 'input';
 
 export default function IntegrationsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenant, setSelectedTenant] = useState('');
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Integration | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
   const [newKeys, setNewKeys] = useState<Integration | null>(null);
-  const [regenId, setRegenId] = useState<string | null>(null);
+  const { ask, confirmProps } = useConfirmAction();
 
   useEffect(() => {
     tenantApi
@@ -30,34 +44,147 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     if (!selectedTenant) return;
-    integrationApi.list(selectedTenant).then(setIntegrations).catch(() => setIntegrations([]));
+    void Promise.all([
+      integrationApi.list(selectedTenant),
+      legalEntityApi.list(selectedTenant),
+    ])
+      .then(([integ, entities]) => {
+        setIntegrations(integ);
+        setLegalEntities(entities.filter((le) => le.isActive));
+      })
+      .catch(() => {
+        setIntegrations([]);
+        setLegalEntities([]);
+      });
   }, [selectedTenant]);
 
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
-    const fd = new FormData(e.currentTarget);
-    const data: Record<string, string> = {};
-    fd.forEach((v, k) => {
-      if (typeof v === 'string' && v.trim()) data[k] = v.trim();
-    });
-
+  const reloadIntegrations = async (mode: 'silent' | 'refresh' = 'silent') => {
+    if (!selectedTenant) return;
+    if (mode === 'refresh') setRefreshing(true);
     try {
-      const created = await integrationApi.create(selectedTenant, data);
-      setNewKeys(created);
-      setShowForm(false);
-      integrationApi.list(selectedTenant).then(setIntegrations);
-    } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Failed to create integration');
+      const [integ, entities] = await Promise.all([
+        integrationApi.list(selectedTenant),
+        legalEntityApi.list(selectedTenant),
+      ]);
+      setIntegrations(integ);
+      setLegalEntities(entities.filter((le) => le.isActive));
+    } catch {
+      setIntegrations([]);
+      setLegalEntities([]);
+    } finally {
+      if (mode === 'refresh') setRefreshing(false);
     }
   };
 
-  const handleRegenerate = async () => {
-    if (!regenId) return;
-    const updated = await integrationApi.regenerateKeys(selectedTenant, regenId);
-    setRegenId(null);
-    setNewKeys(updated);
-    integrationApi.list(selectedTenant).then(setIntegrations);
+  const applySearch = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setSearchQuery(searchInput.trim());
+  };
+
+  const filteredIntegrations = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return integrations;
+    return integrations.filter((integ) => {
+      const haystack = [
+        integ.code,
+        integ.name,
+        integ.apiKey,
+        integ.legalEntity?.code,
+        integ.legalEntity?.name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [integrations, searchQuery]);
+
+  const defaultLegalEntityId = legalEntities[0]?.id ?? '';
+
+  const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+    const fd = new FormData(e.currentTarget);
+    const data: Record<string, string> = {
+      code: String(fd.get('code') ?? '').trim(),
+      name: String(fd.get('name') ?? '').trim(),
+      legalEntityId: String(fd.get('legalEntityId') ?? '').trim(),
+    };
+
+    if (!data.legalEntityId) {
+      setError('Select a legal entity for this source system.');
+      return;
+    }
+
+    ask(
+      {
+        title: 'Create source system?',
+        description: 'Are you sure you want to create this source system?',
+        confirmLabel: 'Create & generate keys',
+      },
+      async () => {
+        try {
+          const created = await integrationApi.create(selectedTenant, data);
+          setNewKeys(created);
+          setShowForm(false);
+          await reloadIntegrations();
+        } catch (err: any) {
+          const message = err.response?.data?.message ?? 'Failed to create integration';
+          setError(Array.isArray(message) ? message.join(', ') : message);
+        }
+      },
+    );
+  };
+
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editing) return;
+    setError('');
+    const fd = new FormData(e.currentTarget);
+    const data: Record<string, unknown> = {
+      name: String(fd.get('name') ?? '').trim(),
+      legalEntityId: String(fd.get('legalEntityId') ?? '').trim(),
+      isActive: fd.get('isActive') === 'on',
+    };
+
+    if (!data.legalEntityId) {
+      setError('Select a legal entity for this source system.');
+      return;
+    }
+
+    ask(
+      {
+        title: 'Save source system changes?',
+        description: 'Are you sure you want to save these changes?',
+        confirmLabel: 'Save changes',
+      },
+      async () => {
+        try {
+          await integrationApi.update(selectedTenant, editing.id, data);
+          setEditing(null);
+          await reloadIntegrations();
+        } catch (err: any) {
+          const message = err.response?.data?.message ?? 'Failed to update integration';
+          setError(Array.isArray(message) ? message.join(', ') : message);
+        }
+      },
+    );
+  };
+
+  const requestRegenerate = (integration: Integration) => {
+    ask(
+      {
+        title: 'Regenerate API keys?',
+        description: 'Are you sure you want to regenerate the API keys?',
+        confirmLabel: 'Regenerate',
+        tone: 'danger',
+      },
+      async () => {
+        const updated = await integrationApi.regenerateKeys(selectedTenant, integration.id);
+        setNewKeys(updated);
+        await reloadIntegrations();
+      },
+    );
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -74,7 +201,6 @@ export default function IntegrationsPage() {
         <header className="page-header">
           <div>
             <h1 className="page-title">Integrations</h1>
-            <p className="page-subtitle">Source systems that send invoices into the hub.</p>
           </div>
         </header>
         <div className="panel">
@@ -93,42 +219,30 @@ export default function IntegrationsPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Integrations</h1>
-          <p className="page-subtitle">Source systems that send invoices into the hub.</p>
         </div>
         <button
           type="button"
           onClick={() => {
             setError('');
+            setEditing(null);
             setShowForm(true);
           }}
           className="btn btn-primary"
+          disabled={legalEntities.length === 0}
+          title={
+            legalEntities.length === 0
+              ? 'Create a legal entity under Tenants first'
+              : undefined
+          }
         >
           <Plus size={16} />
           New source system
         </button>
       </header>
 
-      <div className="panel panel-body">
-        <label htmlFor="tenant-select" className="field-label">
-          Tenant
-        </label>
-        <SelectMenu
-          id="tenant-select"
-          value={selectedTenant}
-          onChange={setSelectedTenant}
-          options={tenants.map((t) => ({
-            value: t.id,
-            label: t.code,
-            description: t.name,
-          }))}
-          placeholder="Select tenant"
-        />
-      </div>
-
       <Modal
         open={showForm}
-        title={`New source system${selected ? ` for tenant code ${selected.code}` : ''}`}
-        description="Source system is the invoice field sourceSystem. Tenant code is the company selected above."
+        title={`New source system${selected ? ` for ${selected.code}` : ''}`}
         onClose={() => {
           setShowForm(false);
           setError('');
@@ -139,13 +253,40 @@ export default function IntegrationsPage() {
           {error && <p className="alert-error">{error}</p>}
           <div className="form-grid">
             <div className="field">
-              <label className="field-label">Source system *</label>
-              <input name="code" required placeholder="SOURCE_SYSTEM" className={inputClass} />
-              <p className="field-hint">Invoice field sourceSystem must equal this value.</p>
+              <input
+                name="code"
+                required
+                placeholder="Source system *"
+                aria-label="Source system"
+                className={inputClass}
+              />
             </div>
             <div className="field">
-              <label className="field-label">Display name *</label>
-              <input name="name" required placeholder="Name shown in this list" className={inputClass} />
+              <input
+                name="name"
+                required
+                placeholder="Display name *"
+                aria-label="Display name"
+                className={inputClass}
+              />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <select
+                name="legalEntityId"
+                required
+                className={inputClass}
+                defaultValue={defaultLegalEntityId}
+                aria-label="Legal entity"
+              >
+                <option value="" disabled>
+                  Legal entity *
+                </option>
+                {legalEntities.map((le) => (
+                  <option key={le.id} value={le.id}>
+                    {le.code} — {le.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="form-actions">
@@ -167,6 +308,86 @@ export default function IntegrationsPage() {
       </Modal>
 
       <Modal
+        open={editing !== null}
+        title={editing ? `Edit ${editing.code}` : 'Edit source system'}
+        onClose={() => {
+          setEditing(null);
+          setError('');
+        }}
+        size="md"
+      >
+        {editing && (
+          <form key={editing.id} onSubmit={handleUpdate}>
+            {error && <p className="alert-error">{error}</p>}
+            <div className="form-grid">
+              <div className="field">
+                <input
+                  value={editing.code}
+                  disabled
+                  className="input is-locked"
+                  aria-label="Source system"
+                />
+              </div>
+              <div className="field">
+                <input
+                  name="name"
+                  required
+                  defaultValue={editing.name}
+                  placeholder="Display name *"
+                  aria-label="Display name"
+                  className={inputClass}
+                />
+              </div>
+              <div className="field" style={{ gridColumn: '1 / -1' }}>
+                <select
+                  name="legalEntityId"
+                  required
+                  className={inputClass}
+                  defaultValue={editing.legalEntityId ?? defaultLegalEntityId}
+                  aria-label="Legal entity"
+                >
+                  <option value="" disabled>
+                    Legal entity *
+                  </option>
+                  {legalEntities.map((le) => (
+                    <option key={le.id} value={le.id}>
+                      {le.code} — {le.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end pb-2.5">
+                <label className="flex items-center gap-2 text-sm text-[var(--color-ink-muted)] cursor-pointer">
+                  <input
+                    name="isActive"
+                    type="checkbox"
+                    defaultChecked={editing.isActive}
+                    className="border-[var(--color-line)] text-[var(--color-brand-600)] focus:ring-[var(--color-brand-500)]"
+                  />
+                  Active
+                </label>
+              </div>
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(null);
+                  setError('');
+                }}
+                className="btn btn-ghost"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Save changes
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
         open={newKeys !== null}
         title="API Credentials Generated"
         description="Save these now. The secret will not be shown again."
@@ -175,6 +396,11 @@ export default function IntegrationsPage() {
       >
         {newKeys && (
           <div className="space-y-3">
+            {newKeys.legalEntity ? (
+              <p className="page-subtitle">
+                Linked legal entity: {newKeys.legalEntity.code} — {newKeys.legalEntity.name}
+              </p>
+            ) : null}
             <div className="flex items-center gap-2">
               <span className="w-24 shrink-0 text-xs text-[var(--color-ink-subtle)]">API Key</span>
               <code className="flex-1 break-all border border-[var(--color-line)] bg-slate-50 px-2 py-1.5 font-mono text-xs">
@@ -218,26 +444,72 @@ export default function IntegrationsPage() {
         )}
       </Modal>
 
-      <Modal
-        open={regenId !== null}
-        title="Regenerate API keys"
-        description="This invalidates the current API key and secret. Existing clients will need the new credentials."
-        onClose={() => setRegenId(null)}
-        size="md"
-      >
-        <div className="form-actions !mt-0 !border-0 !pt-0">
-          <button type="button" onClick={() => setRegenId(null)} className="btn btn-ghost">
-            Cancel
-          </button>
-          <button type="button" onClick={handleRegenerate} className="btn btn-danger">
-            Regenerate
-          </button>
-        </div>
-      </Modal>
+      <ConfirmModal {...confirmProps} />
+
+      <section className="page-filters" aria-label="Integrations filters">
+        <form className="filter-bar" onSubmit={applySearch}>
+          <div className="field filter-bar-tenant">
+            <label htmlFor="tenant-select" className="field-label">
+              Tenant
+            </label>
+            <SelectMenu
+              id="tenant-select"
+              value={selectedTenant}
+              onChange={(value) => {
+                setSelectedTenant(value);
+                setSearchInput('');
+                setSearchQuery('');
+              }}
+              labelOnly
+              options={tenants.map((t) => ({
+                value: t.id,
+                label: t.code,
+                description: t.name,
+              }))}
+              placeholder="Select tenant"
+            />
+          </div>
+          <div className="field filter-bar-search">
+            <label htmlFor="integration-search" className="field-label">
+              Search
+            </label>
+            <input
+              id="integration-search"
+              className="input"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Code, name, API key…"
+            />
+          </div>
+          <div className="filter-bar-actions">
+            <button type="submit" className="btn btn-search">
+              <Search size={14} /> Search
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={refreshing || !selectedTenant}
+              onClick={() => void reloadIntegrations('refresh')}
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} />
+              Refresh
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {legalEntities.length === 0 ? (
+        <p className="field-hint">
+          This tenant has no active legal entity. Open Tenants → Legal entities and create one
+          (for example CM_DXB) before adding a source system.
+        </p>
+      ) : null}
 
       <div className="panel">
         {integrations.length === 0 ? (
-          <div className="panel-empty">No source systems for this tenant code yet.</div>
+          <div className="panel-empty">No source systems for this tenant yet.</div>
+        ) : filteredIntegrations.length === 0 ? (
+          <div className="panel-empty">No source systems match your search.</div>
         ) : (
           <div className="data-table-scroll">
             <table className="data-table">
@@ -245,35 +517,57 @@ export default function IntegrationsPage() {
                 <tr>
                   <th>Source system</th>
                   <th>Display name</th>
+                  <th>Legal entity</th>
                   <th>API Key</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th className="cell-status">Status</th>
+                  <th className="cell-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {integrations.map((integ) => (
+                {filteredIntegrations.map((integ) => (
                   <tr key={integ.id}>
                     <td className="cell-mono">{integ.code}</td>
-                    <td className="cell-strong">{integ.name}</td>
+                    <td className="cell-wrap">{integ.name}</td>
+                    <td>
+                      {integ.legalEntity ? (
+                        <span className="cell-mono">{integ.legalEntity.code}</span>
+                      ) : (
+                        <span className="page-subtitle">Not linked</span>
+                      )}
+                    </td>
                     <td>
                       <code className="inline-block border border-[var(--color-line-soft)] bg-slate-50 px-2 py-1 font-mono text-xs text-[var(--color-ink-muted)]">
                         {integ.apiKey}
                       </code>
                     </td>
-                    <td>
+                    <td className="cell-status">
                       <span className={`badge ${integ.isActive ? 'badge-success' : 'badge-danger'}`}>
                         {integ.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => setRegenId(integ.id)}
-                        className="btn-link btn-link-warn"
-                        title="Regenerate API keys"
-                      >
-                        <RefreshCw size={14} /> Regen Keys
-                      </button>
+                    <td className="cell-actions">
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError('');
+                            setShowForm(false);
+                            setEditing(integ);
+                          }}
+                          className="btn-link"
+                          title="Edit source system"
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => requestRegenerate(integ)}
+                          className="btn-link btn-link-warn"
+                          title="Regenerate API keys"
+                        >
+                          <RefreshCw size={14} /> Regen Keys
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

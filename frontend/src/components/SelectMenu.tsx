@@ -15,6 +15,8 @@ type SelectMenuProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Show only the label; use description as hover tooltip (e.g. tenant code + name). */
+  labelOnly?: boolean;
 };
 
 type MenuPosition = {
@@ -30,6 +32,7 @@ export default function SelectMenu({
   onChange,
   placeholder = 'Select…',
   className = '',
+  labelOnly = false,
 }: SelectMenuProps) {
   const autoId = useId();
   const listboxId = `${id ?? autoId}-listbox`;
@@ -44,17 +47,22 @@ export default function SelectMenu({
     const trigger = rootRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
+    const viewportPad = 12;
+    const preferredWidth = labelOnly
+      ? rect.width
+      : Math.max(rect.width, Math.min(280, window.innerWidth - viewportPad * 2));
+    const maxLeft = window.innerWidth - preferredWidth - viewportPad;
     setPosition({
       top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
+      left: Math.max(viewportPad, Math.min(rect.left, maxLeft)),
+      width: preferredWidth,
     });
   };
 
   useLayoutEffect(() => {
     if (!open) return;
     updatePosition();
-  }, [open]);
+  }, [open, labelOnly]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +92,10 @@ export default function SelectMenu({
   }, [open]);
 
   return (
-    <div ref={rootRef} className={`select-menu ${className}`.trim()}>
+    <div
+      ref={rootRef}
+      className={`select-menu${labelOnly ? ' is-label-only' : ''} ${className}`.trim()}
+    >
       <button
         type="button"
         id={id}
@@ -92,22 +103,18 @@ export default function SelectMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
-        title={
-          selected
-            ? `${selected.label}${selected.description ? ` — ${selected.description}` : ''}`
-            : undefined
-        }
+        title={selected?.description || undefined}
         onClick={() => setOpen((prev) => !prev)}
       >
         <span className="select-menu-value">
           {selected ? (
-            selected.description ? (
+            labelOnly || !selected.description ? (
+              <span className="select-menu-code">{selected.label}</span>
+            ) : (
               <>
                 <span className="select-menu-code">{selected.label}</span>
                 <span className="select-menu-name"> — {selected.description}</span>
               </>
-            ) : (
-              <span>{selected.label}</span>
             )
           ) : (
             <span className="select-menu-placeholder">{placeholder}</span>
@@ -122,7 +129,7 @@ export default function SelectMenu({
               ref={listRef}
               id={listboxId}
               role="listbox"
-              className="select-menu-list"
+              className={`select-menu-list${labelOnly ? ' is-label-only' : ''}`}
               aria-labelledby={id}
               style={{
                 top: position.top,
@@ -139,18 +146,19 @@ export default function SelectMenu({
                       role="option"
                       aria-selected={isSelected}
                       className={`select-menu-option ${isSelected ? 'is-selected' : ''}`}
+                      title={opt.description || undefined}
                       onClick={() => {
                         onChange(opt.value);
                         setOpen(false);
                       }}
                     >
-                      {opt.description ? (
+                      {labelOnly || !opt.description ? (
+                        <span className="select-menu-code">{opt.label}</span>
+                      ) : (
                         <>
                           <span className="select-menu-code">{opt.label}</span>
                           <span className="select-menu-name">{opt.description}</span>
                         </>
-                      ) : (
-                        <span>{opt.label}</span>
                       )}
                     </button>
                   </li>

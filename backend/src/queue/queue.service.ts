@@ -4,8 +4,11 @@ import IORedis, { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
 import { INVOICE_SUBMISSION_JOB } from '../invoices/invoice.constants';
 
-type QueueJobPayload = {
+export type QueueJobPayload = {
   invoiceId: number;
+  tenantId?: string;
+  legalEntityId?: string | null;
+  aspConnectionId?: string | null;
 };
 
 type InlineProcessor = (payload: QueueJobPayload) => Promise<void>;
@@ -73,8 +76,9 @@ export class QueueService implements OnModuleDestroy {
     this.inlineProcessor = processor;
   }
 
-  async enqueueInvoiceSubmission(invoiceId: number) {
-    const payload = { invoiceId };
+  async enqueueInvoiceSubmission(payload: QueueJobPayload | number) {
+    const job: QueueJobPayload =
+      typeof payload === 'number' ? { invoiceId: payload } : payload;
 
     if (this.queueMode === 'inline') {
       if (!this.inlineProcessor) {
@@ -82,7 +86,7 @@ export class QueueService implements OnModuleDestroy {
       }
 
       setImmediate(() => {
-        void this.inlineProcessor?.(payload).catch((error: unknown) => {
+        void this.inlineProcessor?.(job).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           this.logger.error(`Inline invoice job failed: ${message}`);
         });
@@ -90,8 +94,8 @@ export class QueueService implements OnModuleDestroy {
       return;
     }
 
-    await this.queue?.add(INVOICE_SUBMISSION_JOB, payload, {
-      jobId: `invoice-${invoiceId}`,
+    await this.queue?.add(INVOICE_SUBMISSION_JOB, job, {
+      jobId: `invoice-${job.invoiceId}`,
     });
   }
 

@@ -1,6 +1,8 @@
 # How UAE-FATHOORA works
 
-This note is for developers joining the project. It explains who talks to whom, what the admin screens mean, and where the code lives. Field-level invoice JSON is in [IBMS-INTEGRATION-GUIDE.md](../backend/docs/IBMS-INTEGRATION-GUIDE.md).
+This note is for developers joining the project. It explains who talks to whom, what the admin screens mean, and where the code lives.
+
+- Source-system integration (credentials, payload, status, retry): [SOURCE-SYSTEM-INTEGRATION-GUIDE.md](./SOURCE-SYSTEM-INTEGRATION-GUIDE.md)
 
 ## What this system is
 
@@ -56,9 +58,13 @@ Sign-in uses the hub admin key (`ADMIN_API_KEY` in `backend/.env`). The browser 
 | Page | Route | What you do there |
 |------|-------|-------------------|
 | Dashboard | `/` | Counts and recent invoices |
-| Tenants | `/tenants` | Register a company and its ASP (`aspProvider`, `aspBaseUrl`, ASP API key) |
-| Integrations | `/integrations` | Pick a tenant, then create the source-system client (code, name). The hub shows the API key and secret once. |
+| Tenants | `/tenants` | Register a company; manage **Legal entities** under each tenant |
+| Integrations | `/integrations` | Pick a tenant, create source system, **link a legal entity**, copy API key/secret once |
+| ASP Providers | `/asp-providers` | Provider master + API config. Ready = ACTIVE + registered adapter |
+| ASP Connections | `/asp-connections` | Legal entity → ASP credentials (encrypted). Required before invoice submit |
 | Invoices | `/invoices` | Read status, amounts, and submission detail. Invoices are created by the API, not by this page. |
+
+Professional routing: invoice → Integration → Legal entity (`legalEntityCode` or integration link) → ACTIVE ASP connection → adapter. Do not put ASP credentials on the tenant.
 
 The hub URL is **not** stored on the integration. Each source system keeps it in its own environment.
 
@@ -178,6 +184,6 @@ If `npm run start:dev` crashes with `Cannot find module './app.controller'`, sto
 | Queue | `backend/src/queue/queue.service.ts` |
 | Status poll / ASP retry for source systems | `backend/src/invoices/invoices.controller.ts` |
 | Admin screens | `frontend/src/pages/` |
-| Source-system payload examples | `backend/docs/IBMS-INTEGRATION-GUIDE.md` |
+| Source-system integration guide | `docs/SOURCE-SYSTEM-INTEGRATION-GUIDE.md` |
 
 Every tenant uses `GenericAspAdapter`. The provider name on the tenant (`aspProvider`) is a label. The URL that receives the JSON envelope is `aspBaseUrl`. The Peppol XML is inside `base64Document`.
