@@ -23,8 +23,8 @@ export default function DashboardPage() {
   }
 
   const totalIntegrations = tenants.reduce((s, t) => s + (t.integrations?.length ?? 0), 0);
-  const accepted = invoices.filter((i) =>
-    i.status === 'ACCEPTED' || i.status === 'COMPLETED',
+  const accepted = invoices.filter(
+    (i) => i.status === 'ACCEPTED' || i.status === 'COMPLETED',
   ).length;
   const rejected = invoices.filter((i) => i.status === 'REJECTED').length;
   const pending = invoices.filter((i) =>
@@ -45,7 +45,6 @@ export default function DashboardPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Overview of tenants, integrations, and invoice status.</p>
         </div>
       </header>
 
@@ -83,8 +82,8 @@ export default function DashboardPage() {
                 {invoices.slice(0, 5).map((inv) => (
                   <tr key={inv.id}>
                     <td className="cell-strong">{inv.invoiceNumber}</td>
-                    <td>{inv.sellerName}</td>
-                    <td>{inv.buyerName}</td>
+                    <td className="cell-wrap">{inv.sellerName}</td>
+                    <td className="cell-wrap">{inv.buyerName}</td>
                     <td className="cell-right cell-strong">
                       {inv.currencyCode} {Number(inv.totalAmount).toLocaleString()}
                     </td>

@@ -580,6 +580,17 @@ export class CreateInvoiceDto {
   @IsNotEmpty()
   sourceSystem!: string;
 
+  @ApiPropertyOptional({
+    example: 'CM_DXB',
+    description:
+      'Legal entity code under the tenant. When omitted, Hub uses the integration’s linked legal entity, then the tenant default.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  legalEntityCode?: string;
+
   @ApiProperty({ example: 'BROKING-COMM-100245' })
   @IsString()
   @IsNotEmpty()

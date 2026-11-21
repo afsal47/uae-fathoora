@@ -13,11 +13,13 @@ export class UpdateIntegrationDto {
   @MaxLength(200)
   name?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Legal entity this source system should invoice under',
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  allowedIpRanges?: string;
+  @MaxLength(250)
+  legalEntityId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

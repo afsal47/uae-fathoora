@@ -18,24 +18,29 @@ export class TenantsService {
 
   async create(dto: CreateTenantDto) {
     try {
-      const tenant = await this.prisma.tenant.create({
-        data: {
-          code: dto.code.toUpperCase(),
-          name: dto.name,
-          trn: dto.trn,
-          email: dto.email,
-          phone: dto.phone,
-          addressLine1: dto.addressLine1,
-          addressLine2: dto.addressLine2,
-          city: dto.city,
-          state: dto.state,
-          postalCode: dto.postalCode,
-          countryCode: dto.countryCode ?? 'AE',
-          aspProvider: dto.aspProvider.trim().toUpperCase(),
-          aspBaseUrl: dto.aspBaseUrl,
-          aspApiKey: this.secrets.encrypt(dto.aspApiKey) ?? null,
-        },
-        include: { integrations: true },
+      const tenant = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.tenant.create({
+          data: {
+            code: dto.code.toUpperCase(),
+            name: dto.name,
+            trn: dto.trn,
+            email: dto.email,
+            // Deprecated legacy field; ASP routing uses AspConnection.
+            aspProvider: '',
+            legalEntities: {
+              create: {
+                code: dto.code.toUpperCase(),
+                name: dto.name,
+                trn: dto.trn,
+                email: dto.email,
+                isActive: true,
+              },
+            },
+          },
+          include: { integrations: true, legalEntities: true },
+        });
+
+        return created;
       });
       return this.maskTenant(tenant);
     } catch (error) {
@@ -100,19 +105,6 @@ export class TenantsService {
         name: dto.name,
         trn: dto.trn,
         email: dto.email,
-        phone: dto.phone,
-        addressLine1: dto.addressLine1,
-        addressLine2: dto.addressLine2,
-        city: dto.city,
-        state: dto.state,
-        postalCode: dto.postalCode,
-        countryCode: dto.countryCode,
-        aspProvider: dto.aspProvider?.toUpperCase(),
-        aspBaseUrl: dto.aspBaseUrl,
-        aspApiKey:
-          dto.aspApiKey !== undefined
-            ? this.secrets.encrypt(dto.aspApiKey)
-            : undefined,
         isActive: dto.isActive,
       },
       include: { integrations: true },

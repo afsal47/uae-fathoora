@@ -25,9 +25,12 @@ export class CreateIntegrationDto {
   @MaxLength(50)
   authType?: string;
 
-  @ApiPropertyOptional({ description: 'Comma-separated allowed IP ranges' })
+  @ApiPropertyOptional({
+    description:
+      'Legal entity this source system should invoice under. Defaults to the tenant default legal entity when omitted.',
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  allowedIpRanges?: string;
+  @MaxLength(250)
+  legalEntityId?: string;
 }

@@ -1,11 +1,22 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Building2, Cable, FileText, LayoutDashboard, LogOut, Shield } from 'lucide-react';
+import {
+  Building2,
+  Cable,
+  FileText,
+  LayoutDashboard,
+  Link2,
+  LogOut,
+  Server,
+  Shield,
+} from 'lucide-react';
 import { clearAdminKey } from '../lib/api';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
   { to: '/integrations', label: 'Integrations', icon: Cable },
+  { to: '/asp-providers', label: 'ASP Providers', icon: Server },
+  { to: '/asp-connections', label: 'ASP Connections', icon: Link2 },
   { to: '/invoices', label: 'Invoices', icon: FileText },
 ];
 
@@ -24,7 +35,7 @@ export default function Layout() {
           </div>
           <div className="min-w-0">
             <h1 className="app-brand-title">UAE-FATHOORA</h1>
-            <p className="app-brand-sub">Admin console</p>
+            <p className="app-brand-sub">E-invoice hub</p>
           </div>
         </div>
         <nav className="app-nav">

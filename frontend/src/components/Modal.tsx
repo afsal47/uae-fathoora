@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 export default function Modal({
@@ -7,15 +7,24 @@ export default function Modal({
   description,
   onClose,
   children,
+  footer,
   size = 'lg',
+  elevated = false,
+  tone = 'default',
 }: {
   open: boolean;
   title: string;
   description?: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
   size?: 'md' | 'lg' | 'xl';
+  /** Stack above another open modal (e.g. confirmations). */
+  elevated?: boolean;
+  tone?: 'default' | 'confirm' | 'danger';
 }) {
+  const titleId = useId();
+  const descriptionId = useId();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -35,41 +44,46 @@ export default function Modal({
 
   if (!open) return null;
 
+  const toneClass =
+    tone === 'danger' ? ' is-danger' : tone === 'confirm' ? ' is-confirm' : '';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={`modal-overlay${elevated ? ' is-elevated' : ''}`}>
       <button
         type="button"
         aria-label="Close dialog"
-        className="absolute inset-0 bg-slate-950/45"
+        className="modal-backdrop"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
-        className={`relative flex w-full ${
-          size === 'md' ? 'max-w-lg' : size === 'xl' ? 'max-w-6xl' : 'max-w-3xl'
-        } max-h-[min(92vh,900px)] flex-col overflow-hidden border border-[var(--color-line)] bg-[var(--color-surface)] shadow-2xl shadow-slate-900/20`}
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
+        className={`modal-dialog is-${size}${toneClass}`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--color-line)] bg-[#fafafa] px-6 py-4">
-          <div className="min-w-0">
-            <h2 id="modal-title" className="text-base font-semibold tracking-tight text-[var(--color-ink)]">
+        <div className="modal-header">
+          <div className="modal-header-text min-w-0">
+            <h2 id={titleId} className="modal-title">
               {title}
             </h2>
-            {description && (
-              <p className="mt-1 text-sm leading-snug text-[var(--color-ink-subtle)]">{description}</p>
-            )}
+            {description ? (
+              <p id={descriptionId} className="modal-description">
+                {description}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 p-1.5 text-[var(--color-ink-subtle)] hover:bg-slate-200/70 hover:text-[var(--color-ink)]"
+            className="modal-close"
             aria-label="Close"
           >
-            <X size={18} />
+            <X size={16} strokeWidth={1.75} />
           </button>
         </div>
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        <div className="modal-body">{children}</div>
+        {footer ? <div className="modal-footer">{footer}</div> : null}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Integration, Invoice, InvoiceLine, Prisma, Tenant } from '@prisma/client';
+import { AspConnectionResolverService } from '../asp/asp-connection-resolver.service';
 import {
   buildPintAePayload,
   normalizeLegalRegistration,
@@ -11,6 +12,7 @@ import {
   toPeppolInvoiceNumber,
 } from '../asp/pint-ae-payload.builder';
 import { buildPintAeXml } from '../asp/pint-ae-xml.builder';
+import { HUB_PROCESSING_STATUS } from '../asp/status/internal-status';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -52,6 +54,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
+    private readonly aspConnectionResolver: AspConnectionResolverService,
   ) {}
 
   async create(createInvoiceDto: CreateInvoiceDto) {
@@ -155,10 +158,27 @@ export class InvoicesService {
       undefined;
     const hubInvoiceNumber = await this.allocateHubInvoiceNumber(tenant.id);
 
+    const legalEntityId =
+      await this.aspConnectionResolver.resolveLegalEntityIdForInvoice({
+        tenantId: tenant.id,
+        legalEntityCode: createInvoiceDto.legalEntityCode,
+        integrationLegalEntityId: integration.legalEntityId,
+      });
+
+    // Professional path: invoices require an ACTIVE ASP connection.
+    // Do not queue against legacy tenant.asp* fields.
+    const connection = await this.aspConnectionResolver.resolveForLegalEntity({
+      tenantId: tenant.id,
+      legalEntityId,
+    });
+    const aspConnectionId = connection.id;
+
     const invoice = await this.prisma.invoice.create({
       data: {
         tenantId: tenant.id,
         integrationId: integration.id,
+        legalEntityId,
+        aspConnectionId,
         sourceSystem: createInvoiceDto.sourceSystem,
         sourceDocumentId: createInvoiceDto.sourceDocumentId,
         idempotencyKey: createInvoiceDto.idempotencyKey,
@@ -166,6 +186,7 @@ export class InvoicesService {
         sourceSystemDCNoteId,
         documentType: resolvedDocumentType,
         status: INVOICE_STATUS.QUEUED,
+        hubProcessingStatus: HUB_PROCESSING_STATUS.QUEUED,
         issueDate: new Date(createInvoiceDto.issueDate),
         currencyCode: createInvoiceDto.currencyCode ?? 'AED',
         sellerName: createInvoiceDto.seller.name,
@@ -225,7 +246,12 @@ export class InvoicesService {
       },
     });
 
-    await this.queueService.enqueueInvoiceSubmission(invoice.id);
+    await this.queueService.enqueueInvoiceSubmission({
+      invoiceId: invoice.id,
+      tenantId: tenant.id,
+      legalEntityId,
+      aspConnectionId,
+    });
 
     return invoice;
   }
@@ -269,6 +295,11 @@ export class InvoicesService {
     sourceDocumentId: true,
     sourceSystemDCNoteId: true,
     status: true,
+    hubProcessingStatus: true,
+    aspSubmissionStatus: true,
+    peppolDeliveryStatus: true,
+    taxReportingStatus: true,
+    providerStatusRaw: true,
     submissionAttempts: true,
     submittedAt: true,
     acceptedAt: true,

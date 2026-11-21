@@ -75,17 +75,22 @@ export async function verifyAdminKey(key: string): Promise<boolean> {
   }
 }
 
+export type LegalEntity = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  trn?: string | null;
+  email?: string | null;
+  isActive: boolean;
+};
+
 export type Tenant = {
   id: string;
   code: string;
   name: string;
   trn: string | null;
   email: string | null;
-  phone: string | null;
-  addressLine1: string | null;
-  city: string | null;
-  state: string | null;
-  countryCode: string;
   aspProvider: string;
   aspBaseUrl: string | null;
   aspApiKey: string | null;
@@ -103,6 +108,11 @@ export type Integration = {
   authType: string;
   apiKey: string;
   apiSecret: string;
+  legalEntityId?: string | null;
+  legalEntity?: Pick<
+    LegalEntity,
+    'id' | 'code' | 'name' | 'trn' | 'isActive'
+  > | null;
   isActive: boolean;
   createdAt: string;
   _count?: { invoices: number };
@@ -269,6 +279,98 @@ export const invoiceApi = {
         responseType: 'text',
         transformResponse: [(data) => data],
       })
+      .then((r) => r.data),
+};
+
+export type AspProvider = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  adapterRegistered?: boolean;
+  integrationReady?: boolean;
+  integrationImplementationStatus?: string;
+  apiConfigs?: AspApiConfig[];
+};
+
+export type AspApiConfig = {
+  id: string;
+  aspProviderId: string;
+  environment: string;
+  baseUrl?: string | null;
+  loginPath?: string | null;
+  invoiceSubmitPath?: string | null;
+  statusPath?: string | null;
+  timeoutMs: number;
+  isActive: boolean;
+};
+
+export type AspConnection = {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  aspProviderId: string;
+  environment: string;
+  status: string;
+  lastTestAt?: string | null;
+  lastTestStatus?: string | null;
+  credentialKeys?: string[];
+  adapterRegistered?: boolean;
+  aspProvider?: AspProvider;
+  legalEntity?: LegalEntity;
+};
+
+export const aspProviderApi = {
+  list: () => api.get<AspProvider[]>('/asp-providers').then((r) => r.data),
+  create: (data: Record<string, unknown>) =>
+    api.post<AspProvider>('/asp-providers', data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.patch<AspProvider>(`/asp-providers/${id}`, data).then((r) => r.data),
+  listApiConfigs: (providerId: string) =>
+    api
+      .get<AspApiConfig[]>(`/asp-providers/${providerId}/api-configs`)
+      .then((r) => r.data),
+  upsertApiConfig: (providerId: string, data: Record<string, unknown>) =>
+    api
+      .put<AspApiConfig>(`/asp-providers/${providerId}/api-configs`, data)
+      .then((r) => r.data),
+};
+
+export const legalEntityApi = {
+  list: (tenantId: string) =>
+    api
+      .get<LegalEntity[]>(`/tenants/${tenantId}/legal-entities`)
+      .then((r) => r.data),
+  create: (tenantId: string, data: Record<string, unknown>) =>
+    api
+      .post<LegalEntity>(`/tenants/${tenantId}/legal-entities`, data)
+      .then((r) => r.data),
+  update: (tenantId: string, id: string, data: Record<string, unknown>) =>
+    api
+      .patch<LegalEntity>(`/tenants/${tenantId}/legal-entities/${id}`, data)
+      .then((r) => r.data),
+};
+
+export const aspConnectionApi = {
+  list: (tenantId: string, legalEntityId?: string) =>
+    api
+      .get<AspConnection[]>(`/tenants/${tenantId}/asp-connections`, {
+        params: legalEntityId ? { legalEntityId } : undefined,
+      })
+      .then((r) => r.data),
+  create: (tenantId: string, data: Record<string, unknown>) =>
+    api
+      .post<AspConnection>(`/tenants/${tenantId}/asp-connections`, data)
+      .then((r) => r.data),
+  update: (tenantId: string, id: string, data: Record<string, unknown>) =>
+    api
+      .patch<AspConnection>(`/tenants/${tenantId}/asp-connections/${id}`, data)
+      .then((r) => r.data),
+  test: (tenantId: string, id: string) =>
+    api
+      .post<{ ok: boolean; message: string }>(
+        `/tenants/${tenantId}/asp-connections/${id}/test`,
+      )
       .then((r) => r.data),
 };
 

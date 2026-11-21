@@ -68,7 +68,7 @@ export default function LoginPage() {
             submission.
           </p>
         </div>
-        <p className="text-xs text-slate-500">Hub console · Access key required</p>
+        <p className="text-xs text-[var(--color-ink-subtle)]">Hub console · Access key required</p>
       </aside>
 
       <div className="login-main">

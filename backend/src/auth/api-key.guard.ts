@@ -50,15 +50,24 @@ export class ApiKeyGuard implements CanActivate {
       }
     }
 
+    let apiSecretPlain: string;
+    try {
+      apiSecretPlain =
+        this.secrets.decrypt(integration.apiSecret) ?? integration.apiSecret ?? '';
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid API credentials (secret cannot be decrypted). Regenerate keys in Hub admin.',
+      );
+    }
+
     if (hmacRequired && signature && timestamp) {
-      const apiSecret = this.secrets.decrypt(integration.apiSecret) ?? '';
-      this.verifyHmac(apiSecret, timestamp, request.body, signature);
+      this.verifyHmac(apiSecretPlain, timestamp, request.body, signature);
     }
 
     (request as any).tenant = integration.tenant;
     (request as any).integration = {
       ...integration,
-      apiSecret: this.secrets.decrypt(integration.apiSecret) ?? integration.apiSecret,
+      apiSecret: apiSecretPlain,
     };
 
     return true;
